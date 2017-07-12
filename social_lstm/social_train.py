@@ -3,7 +3,7 @@ import argparse
 import os
 import time
 import pickle
-import ipdb
+#import ipdb
 
 from social_model import SocialModel
 from social_utils import SocialDataLoader
@@ -64,11 +64,15 @@ def main():
     # The leave out dataset
     parser.add_argument('--leaveDataset', type=int, default=3,
                         help='The dataset index to be left out in training')
+    parser.add_argument('--visible',type=str,
+                        required=False, default=None, help='GPU to run on')
     args = parser.parse_args()
     train(args)
 
 
 def train(args):
+    if args.visible:
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.visible
     datasets = range(4)
     # Remove the leaveDataset from datasets
     datasets.remove(args.leaveDataset)
@@ -104,30 +108,30 @@ def train(args):
                 start = time.time()
 
                 # Get the source, target and dataset data for the next batch
-                # x, y are input and target data which are lists containing numpy arrays of size seq_length x maxNumPeds x 3
+                # s_batch, t_batch are input and target data which are lists containing numpy arrays of size seq_length x maxNumPeds x 3
                 # d is the list of dataset indices from which each batch is generated (used to differentiate between datasets)
-                x, y, d = data_loader.next_batch()
+                s_batch, t_batch, d = data_loader.next_batch()
 
                 # variable to store the loss for this batch
                 loss_batch = 0
 
                 # For each sequence in the batch
-                for batch in range(data_loader.batch_size):
-                    # x_batch, y_batch and d_batch contains the source, target and dataset index data for
+                for seq_num in range(data_loader.batch_size):
+                    # s_seq, t_seq and d_batch contains the source, target and dataset index data for
                     # seq_length long consecutive frames in the dataset
-                    # x_batch, y_batch would be numpy arrays of size seq_length x maxNumPeds x 3
+                    # s_seq, t_seq would be numpy arrays of size seq_length x maxNumPeds x 3
                     # d_batch would be a scalar identifying the dataset from which this sequence is extracted
-                    x_batch, y_batch, d_batch = x[batch], y[batch], d[batch]
+                    s_seq, t_seq, d_seq = s_batch[seq_num], t_batch[seq_num], d[seq_num]
 
-                    if d_batch == 0 and datasets[0] == 0:
+                    if d_seq == 0 and datasets[0] == 0:
                         dataset_data = [640, 480]
                     else:
                         dataset_data = [720, 576]
 
-                    grid_batch = getSequenceGridMask(x_batch, dataset_data, args.neighborhood_size, args.grid_size)
+                    grid_batch = getSequenceGridMask(s_seq, dataset_data, args.neighborhood_size, args.grid_size)
 
                     # Feed the source, target data
-                    feed = {model.input_data: x_batch, model.target_data: y_batch, model.grid_data: grid_batch}
+                    feed = {model.input_data: s_seq, model.target_data: t_seq, model.grid_data: grid_batch}
 
                     train_loss, _ = sess.run([model.cost, model.train_op], feed)
 
@@ -136,7 +140,7 @@ def train(args):
                 end = time.time()
                 loss_batch = loss_batch / data_loader.batch_size
                 print(
-                    "{}/{} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}"
+                    "{}/{} (epoch {}), train_loss = {:.3f}, time/seq_num = {:.3f}"
                     .format(
                         e * data_loader.num_batches + b,
                         args.num_epochs * data_loader.num_batches,

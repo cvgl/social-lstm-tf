@@ -9,7 +9,7 @@ Date : 17th October 2016
 import os
 import pickle
 import numpy as np
-import ipdb
+#import ipdb
 import random
 
 # The data loader class that loads data from the datasets considering
@@ -182,9 +182,9 @@ class SocialDataLoader():
         Function to get the next batch of points
         '''
         # Source data
-        x_batch = []
+        source_batch = []
         # Target data
-        y_batch = []
+        target_batch = []
         # Dataset data
         d = []
         # Iteration index
@@ -223,8 +223,8 @@ class SocialDataLoader():
                             if tped.size != 0:
                                 targetData[seq, ped, :] = tped
 
-                x_batch.append(sourceData)
-                y_batch.append(targetData)
+                source_batch.append(sourceData)
+                target_batch.append(targetData)
 
                 # Advance the frame pointer to a random point
                 if randomUpdate:
@@ -239,7 +239,7 @@ class SocialDataLoader():
                 # Increment the dataset pointer and set the frame_pointer to zero
                 self.tick_batch_pointer()
 
-        return x_batch, y_batch, d
+        return source_batch, target_batch, d
 
     def tick_batch_pointer(self):
         '''

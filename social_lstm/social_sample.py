@@ -64,17 +64,23 @@ def main():
 
     parser = argparse.ArgumentParser()
     # Observed length of the trajectory parameter
-    parser.add_argument('--obs_length', type=int, default=4,
+    parser.add_argument('--obs_length', type=int, default=8,
                         help='Observed length of the trajectory')
     # Predicted length of the trajectory parameter
-    parser.add_argument('--pred_length', type=int, default=4,
+    parser.add_argument('--pred_length', type=int, default=12,
                         help='Predicted length of the trajectory')
     # Test dataset
     parser.add_argument('--test_dataset', type=int, default=3,
                         help='Dataset to be tested on')
 
+    parser.add_argument('--visible',type=str,
+                        required=False, default=None, help='GPU to run on')
+
     # Parse the parameters
     sample_args = parser.parse_args()
+
+    if sample_args.visible:
+        os.environ["CUDA_VISIBLE_DEVICES"] = sample_args.visible
 
     # Define the path for the config file for saved args
     with open(os.path.join('save', 'social_config.pkl'), 'rb') as f:
