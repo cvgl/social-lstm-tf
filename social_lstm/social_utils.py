@@ -9,7 +9,6 @@ Date : 17th October 2016
 import os
 import pickle
 import numpy as np
-#import ipdb
 import random
 
 # The data loader class that loads data from the datasets considering
@@ -17,7 +16,8 @@ import random
 # sequence.
 class SocialDataLoader():
 
-    def __init__(self, batch_size=50, seq_length=5, maxNumPeds=40, datasets=[0, 1, 2, 3, 4], forcePreProcess=False):
+    def __init__(self, batch_size=50, seq_length=5, maxNumPeds=40,
+            dataset_path='../data', forcePreProcess=False):
         '''
         Initialiser function for the SocialDataLoader class
         params:
@@ -26,18 +26,18 @@ class SocialDataLoader():
         forcePreProcess : Flag to forcefully preprocess the data again from csv files
         '''
         # List of data directories where raw data resides
+        '''
         self.data_dirs = ['../data/eth/univ', '../data/eth/hotel',
                           '../data/ucy/zara/zara01', '../data/ucy/zara/zara02',
                           '../data/ucy/univ']
-        # self.data_dirs = ['./data/eth/univ', './data/eth/hotel']
+        '''
+        self.data_dir = dataset_path
 
-        self.used_data_dirs = [self.data_dirs[x] for x in datasets]
+        self.used_data_dirs = [os.path.join(dataset_path, _file) for _file in
+                os.listdir(self.data_dir)]
 
         # Number of datasets
-        self.numDatasets = len(self.data_dirs)
-
-        # Data directory where the pre-processed pickle file resides
-        self.data_dir = '../data'
+        self.numDatasets = len(self.used_data_dirs)
 
         # Maximum number of peds in a single frame (Number obtained by checking the datasets)
         self.maxNumPeds = maxNumPeds
@@ -84,11 +84,11 @@ class SocialDataLoader():
         dataset_index = 0
 
         # For each dataset
-        for directory in data_dirs:
+        for file_path in data_dirs:
 
-            # Define path of the csv file of the current dataset
-            file_path = os.path.join(directory, 'pixel_pos.csv')
-
+            if os.path.splitext(file_path)[1] != '.csv':
+                print file_path, os.path.splitext(file_path)[1]
+                continue
             # Load the data from the csv file
             data = np.genfromtxt(file_path, delimiter=',')
 
@@ -167,8 +167,8 @@ class SocialDataLoader():
         for dataset in range(len(self.data)):
             # get the frame data for the current dataset
             all_frame_data = self.data[dataset]
-            print len(all_frame_data)
             # Increment the counter with the number of sequences in the current dataset
+            # DOUBT
             counter += int(len(all_frame_data) / (self.seq_length+2))
 
         # Calculate the number of batches
@@ -190,16 +190,16 @@ class SocialDataLoader():
         # Iteration index
         i = 0
         while i < self.batch_size:
-            # Extract the frame data of the current dataset
-            frame_data = self.data[self.dataset_pointer]
+            # Shape : numFrames, maxNumPeds, 3 : pedId, x, y
+            curr_dataset = self.data[self.dataset_pointer]
             # Get the frame pointer for the current dataset
             idx = self.frame_pointer
             # While there is still seq_length number of frames left in the current dataset
-            if idx + self.seq_length < frame_data.shape[0]:
+            if idx + self.seq_length < curr_dataset.shape[0]:
                 # All the data in this sequence
-                seq_frame_data = frame_data[idx:idx+self.seq_length+1, :]
-                seq_source_frame_data = frame_data[idx:idx+self.seq_length, :]
-                seq_target_frame_data = frame_data[idx+1:idx+self.seq_length+1, :]
+                seq_frame_data = curr_dataset[idx:idx+self.seq_length+1, :]
+                source_seq = curr_dataset[idx:idx+self.seq_length, :]
+                target_seq = curr_dataset[idx+1:idx+self.seq_length+1, :]
                 # Number of unique peds in this sequence of frames
                 pedID_list = np.unique(seq_frame_data[:, :, 0])
                 numUniquePeds = pedID_list.shape[0]
@@ -207,21 +207,22 @@ class SocialDataLoader():
                 sourceData = np.zeros((self.seq_length, self.maxNumPeds, 3))
                 targetData = np.zeros((self.seq_length, self.maxNumPeds, 3))
 
-                for seq in range(self.seq_length):
-                    sseq_frame_data = seq_source_frame_data[seq, :]
-                    tseq_frame_data = seq_target_frame_data[seq, :]
+                # Align ped in all frames. After this a ped within the
+                # seq will be at the same index in all frames
+                for frame_num in range(self.seq_length):
+                    curr_source_frame = source_seq[frame_num, :]
+                    curr_target_frame = target_seq[frame_num, :]
                     for ped in range(numUniquePeds):
                         pedID = pedID_list[ped]
-
                         if pedID == 0:
                             continue
                         else:
-                            sped = sseq_frame_data[sseq_frame_data[:, 0] == pedID, :]
-                            tped = np.squeeze(tseq_frame_data[tseq_frame_data[:, 0] == pedID, :])
-                            if sped.size != 0:
-                                sourceData[seq, ped, :] = sped
-                            if tped.size != 0:
-                                targetData[seq, ped, :] = tped
+                            curr_source_ped = curr_source_frame[curr_source_frame[:, 0] == pedID, :]
+                            curr_target_ped = np.squeeze(curr_target_frame[curr_target_frame[:, 0] == pedID, :])
+                            if curr_source_ped.size != 0:
+                                sourceData[frame_num, ped, :] = curr_source_ped
+                            if curr_target_ped.size != 0:
+                                targetData[frame_num, ped, :] = curr_target_ped
 
                 source_batch.append(sourceData)
                 target_batch.append(targetData)

@@ -10,7 +10,14 @@ from social_utils import SocialDataLoader
 from social_model import SocialModel
 from grid import getSequenceGridMask
 # from social_train import getSocialGrid, getSocialTensor
+CHK_DIR = '/vision/u/agupta/social-lstm-tf/social_lstm/checkpoints'
 
+def make_save_path(args):
+    folder_name = args.mode
+    save_path = os.path.join(CHK_DIR, folder_name)
+    if not os.path.isdir(save_path):
+        os.mkdir(save_path)
+    return save_path
 
 def get_mean_error(predicted_traj, true_traj, observed_length, maxNumPeds):
     '''
@@ -70,20 +77,24 @@ def main():
     parser.add_argument('--pred_length', type=int, default=12,
                         help='Predicted length of the trajectory')
     # Test dataset
-    parser.add_argument('--test_dataset', type=int, default=3,
+    parser.add_argument('--test_dataset', type=str,
                         help='Dataset to be tested on')
 
     parser.add_argument('--visible',type=str,
                         required=False, default=None, help='GPU to run on')
 
+    parser.add_argument('--mode', type=str, default='social', 
+                        help='social, occupancy, naive')
     # Parse the parameters
     sample_args = parser.parse_args()
 
     if sample_args.visible:
         os.environ["CUDA_VISIBLE_DEVICES"] = sample_args.visible
 
+    save_path = make_save_path(sample_args)
+
     # Define the path for the config file for saved args
-    with open(os.path.join('save', 'social_config.pkl'), 'rb') as f:
+    with open(os.path.join(save_path, 'social_config.pkl'), 'rb') as f:
         saved_args = pickle.load(f)
 
     # Create a SocialModel object with the saved_args and infer set to true
@@ -94,17 +105,15 @@ def main():
     saver = tf.train.Saver()
 
     # Get the checkpoint state for the model
-    ckpt = tf.train.get_checkpoint_state('save')
+    ckpt = tf.train.get_checkpoint_state(save_path)
     print ('loading model: ', ckpt.model_checkpoint_path)
 
     # Restore the model at the checkpoint
     saver.restore(sess, ckpt.model_checkpoint_path)
 
-    # Dataset to get data from
-    dataset = [sample_args.test_dataset]
-
     # Create a SocialDataLoader object with batch_size 1 and seq_length equal to observed_length + pred_length
-    data_loader = SocialDataLoader(1, sample_args.pred_length + sample_args.obs_length, saved_args.maxNumPeds, dataset, True)
+    data_loader = SocialDataLoader(1, sample_args.pred_length +
+            sample_args.obs_length, saved_args.maxNumPeds, args.test_dataset, True)
 
     # Reset all pointers of the data_loader
     data_loader.reset_batch_pointer()
@@ -121,19 +130,20 @@ def main():
         # Batch size is 1
         x_batch, y_batch, d_batch = x[0], y[0], d[0]
 
+        '''
         if d_batch == 0 and dataset[0] == 0:
             dimensions = [640, 480]
         else:
             dimensions = [720, 576]
-
-        grid_batch = getSequenceGridMask(x_batch, dimensions, saved_args.neighborhood_size, saved_args.grid_size)
+        '''
+        grid_batch = getSequenceGridMask(x_batch, [0,0], saved_args.neighborhood_size, saved_args.grid_size)
 
         obs_traj = x_batch[:sample_args.obs_length]
         obs_grid = grid_batch[:sample_args.obs_length]
         # obs_traj is an array of shape obs_length x maxNumPeds x 3
 
         print "********************** SAMPLING A NEW TRAJECTORY", b, "******************************"
-        complete_traj = model.sample(sess, obs_traj, obs_grid, dimensions, x_batch, sample_args.pred_length)
+        complete_traj = model.sample(sess, obs_traj, obs_grid, [0,0], x_batch, sample_args.pred_length)
 
         # ipdb.set_trace()
         # complete_traj is an array of shape (obs_length+pred_length) x maxNumPeds x 3
@@ -149,7 +159,7 @@ def main():
     print "Total mean error of the model is ", total_error/data_loader.num_batches
 
     print "Saving results"
-    with open(os.path.join('save', 'social_results.pkl'), 'wb') as f:
+    with open(os.path.join(save_path, 'social_results.pkl'), 'wb') as f:
         pickle.dump(results, f)
 
 if __name__ == '__main__':

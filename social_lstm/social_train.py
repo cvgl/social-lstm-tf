@@ -3,12 +3,14 @@ import argparse
 import os
 import time
 import pickle
+import numpy as np
 #import ipdb
 
 from social_model import SocialModel
 from social_utils import SocialDataLoader
 from grid import getSequenceGridMask
 
+CHK_DIR = '/vision/u/agupta/social-lstm-tf/social_lstm/checkpoints'
 
 def main():
     parser = argparse.ArgumentParser()
@@ -30,7 +32,7 @@ def main():
     parser.add_argument('--seq_length', type=int, default=8,
                         help='RNN sequence length')
     # Number of epochs parameter
-    parser.add_argument('--num_epochs', type=int, default=100,
+    parser.add_argument('--num_epochs', type=int, default=10,
                         help='number of epochs')
     # Frequency at which the model should be saved parameter
     parser.add_argument('--save_every', type=int, default=400,
@@ -53,47 +55,63 @@ def main():
     parser.add_argument('--embedding_size', type=int, default=64,
                         help='Embedding dimension for the spatial coordinates')
     # Size of neighborhood to be considered parameter
-    parser.add_argument('--neighborhood_size', type=int, default=32,
+    parser.add_argument('--neighborhood_size', type=float, default=32,
                         help='Neighborhood size to be considered for social grid')
     # Size of the social grid parameter
     parser.add_argument('--grid_size', type=int, default=4,
                         help='Grid size of the social grid')
     # Maximum number of pedestrians to be considered
-    parser.add_argument('--maxNumPeds', type=int, default=40,
+    parser.add_argument('--maxNumPeds', type=int, default=50,
                         help='Maximum Number of Pedestrians')
-    # The leave out dataset
-    parser.add_argument('--leaveDataset', type=int, default=3,
-                        help='The dataset index to be left out in training')
+
+    parser.add_argument('--dataset_path', type=str, default='./../data/',
+                        help='Path training data')
     parser.add_argument('--visible',type=str,
                         required=False, default=None, help='GPU to run on')
+    parser.add_argument('--mode', type=str, default='social', 
+                        help='social, occupancy, naive')
     args = parser.parse_args()
     train(args)
 
 
+def make_save_path(args):
+    import datetime
+    folder_name = args.mode
+    now = datetime.datetime.now()
+    timestamp = now.strftime("%m_%d_%H_%M")
+    save_path = os.path.join(CHK_DIR, folder_name, timestamp)
+
+    if not os.path.isdir(save_path):
+        os.mkdir(save_path)
+
+    return save_path
+
 def train(args):
     if args.visible:
         os.environ["CUDA_VISIBLE_DEVICES"] = args.visible
-    datasets = range(4)
-    # Remove the leaveDataset from datasets
-    datasets.remove(args.leaveDataset)
 
+    save_path = make_save_path(args)
+    dataset_path = args.dataset_path
+    log_path = os.path.join(save_path, 'log')
+    if not os.path.isdir(log_path):
+        os.makedirs(log_path)
     # Create the SocialDataLoader object
-    data_loader = SocialDataLoader(args.batch_size, args.seq_length, args.maxNumPeds, datasets, forcePreProcess=True)
+    data_loader = SocialDataLoader(args.batch_size, args.seq_length,
+            args.maxNumPeds, dataset_path, forcePreProcess=True)
 
-    with open(os.path.join('save', 'social_config.pkl'), 'wb') as f:
+    with open(os.path.join(save_path, 'social_config.pkl'), 'wb') as f:
         pickle.dump(args, f)
 
     # Create a SocialModel object with the arguments
     model = SocialModel(args)
-
+    all_loss = []
     # Initialize a TensorFlow session
     with tf.Session() as sess:
         # Initialize all variables in the graph
         sess.run(tf.initialize_all_variables())
         # Initialize a saver that saves all the variables in the graph
         saver = tf.train.Saver(tf.all_variables())
-
-        # summary_writer = tf.train.SummaryWriter('/tmp/lstm/logs', graph_def=sess.graph_def)
+        summary_writer = tf.summary.FileWriter(log_path, sess.graph)
 
         # For each epoch
         for e in range(args.num_epochs):
@@ -122,13 +140,13 @@ def train(args):
                     # s_seq, t_seq would be numpy arrays of size seq_length x maxNumPeds x 3
                     # d_batch would be a scalar identifying the dataset from which this sequence is extracted
                     s_seq, t_seq, d_seq = s_batch[seq_num], t_batch[seq_num], d[seq_num]
-
+                    '''
                     if d_seq == 0 and datasets[0] == 0:
                         dataset_data = [640, 480]
                     else:
                         dataset_data = [720, 576]
-
-                    grid_batch = getSequenceGridMask(s_seq, dataset_data, args.neighborhood_size, args.grid_size)
+                    '''
+                    grid_batch = getSequenceGridMask(s_seq, [0, 0], args.neighborhood_size, args.grid_size)
 
                     # Feed the source, target data
                     feed = {model.input_data: s_seq, model.target_data: t_seq, model.grid_data: grid_batch}
@@ -139,6 +157,7 @@ def train(args):
 
                 end = time.time()
                 loss_batch = loss_batch / data_loader.batch_size
+                all_loss.append(loss_batch)
                 print(
                     "{}/{} (epoch {}), train_loss = {:.3f}, time/seq_num = {:.3f}"
                     .format(
@@ -149,9 +168,10 @@ def train(args):
 
                 # Save the model if the current epoch and batch number match the frequency
                 if (e * data_loader.num_batches + b) % args.save_every == 0 and ((e * data_loader.num_batches + b) > 0):
-                    checkpoint_path = os.path.join('save', 'social_model.ckpt')
+                    checkpoint_path = os.path.join(save_path, 'social_model.ckpt')
                     saver.save(sess, checkpoint_path, global_step=e * data_loader.num_batches + b)
                     print("model saved to {}".format(checkpoint_path))
+                    np.savetxt(os.path.join(log_path, 'loss.txt'), np.asarray(all_loss))
 
 if __name__ == '__main__':
     main()
