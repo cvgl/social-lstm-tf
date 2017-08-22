@@ -32,10 +32,8 @@ class SocialDataLoader():
                           '../data/ucy/univ']
         '''
         self.data_dir = dataset_path
-
         self.used_data_dirs = [os.path.join(dataset_path, _file) for _file in
                 os.listdir(self.data_dir)]
-
         # Number of datasets
         self.numDatasets = len(self.used_data_dirs)
 

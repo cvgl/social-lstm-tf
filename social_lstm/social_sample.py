@@ -46,11 +46,6 @@ def get_mean_error(predicted_traj, true_traj, observed_length, maxNumPeds):
                 # Ped comes in the prediction time. Not seen in observed part
                 continue
             else:
-                if true_pos[j, 1] > 1 or true_pos[j, 1] < 0:
-                    continue
-                elif true_pos[j, 2] > 1 or true_pos[j, 2] < 0:
-                    continue
-
                 timestep_error += np.linalg.norm(true_pos[j, [1, 2]] - pred_pos[j, [1, 2]])
                 counter += 1
 
@@ -83,15 +78,14 @@ def main():
     parser.add_argument('--visible',type=str,
                         required=False, default=None, help='GPU to run on')
 
-    parser.add_argument('--mode', type=str, default='social', 
-                        help='social, occupancy, naive')
+    parser.add_argument('--model_path', type=str)
     # Parse the parameters
     sample_args = parser.parse_args()
 
     if sample_args.visible:
         os.environ["CUDA_VISIBLE_DEVICES"] = sample_args.visible
 
-    save_path = make_save_path(sample_args)
+    save_path = sample_args.model_path
 
     # Define the path for the config file for saved args
     with open(os.path.join(save_path, 'social_config.pkl'), 'rb') as f:
@@ -113,7 +107,7 @@ def main():
 
     # Create a SocialDataLoader object with batch_size 1 and seq_length equal to observed_length + pred_length
     data_loader = SocialDataLoader(1, sample_args.pred_length +
-            sample_args.obs_length, saved_args.maxNumPeds, args.test_dataset, True)
+            sample_args.obs_length, saved_args.maxNumPeds, sample_args.test_dataset, True)
 
     # Reset all pointers of the data_loader
     data_loader.reset_batch_pointer()
