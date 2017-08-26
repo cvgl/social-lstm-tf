@@ -10,7 +10,8 @@ from social_model import SocialModel
 from social_utils import SocialDataLoader
 from grid import getSequenceGridMask
 
-CHK_DIR = '/vision/u/agupta/social-lstm-tf/social_lstm/checkpoints'
+# CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/social-lstm-checkpoints/'
+CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/test-checkpoints/'
 
 def main():
     parser = argparse.ArgumentParser()
@@ -32,7 +33,7 @@ def main():
     parser.add_argument('--seq_length', type=int, default=8,
                         help='RNN sequence length')
     # Number of epochs parameter
-    parser.add_argument('--num_epochs', type=int, default=10,
+    parser.add_argument('--num_epochs', type=int, default=50,
                         help='number of epochs')
     # Frequency at which the model should be saved parameter
     parser.add_argument('--save_every', type=int, default=400,
@@ -147,6 +148,11 @@ def train(args):
                         dataset_data = [720, 576]
                     '''
                     grid_batch = getSequenceGridMask(s_seq, [0, 0], args.neighborhood_size, args.grid_size)
+                    
+                    print '------------------------------------------------------------------------------'
+                    for frame_index in range(args.seq_length):
+                        print s_seq[frame_index, 0:10, :]
+                    # print grid_batch[0, 1, 2, :]
 
                     # Feed the source, target data
                     feed = {model.input_data: s_seq, model.target_data: t_seq, model.grid_data: grid_batch}

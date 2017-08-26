@@ -46,6 +46,7 @@ class SocialModel():
         # Construct the basicLSTMCell recurrent unit with a dimension given by args.rnn_size
         with tf.name_scope("LSTM_cell"):
             cell = rnn_cell.BasicLSTMCell(args.rnn_size, state_is_tuple=False)
+	    #cell = BasicLSTMCell(args.rnn_size, state_is_tuple=False)
 
         # placeholders for the input data and the target data
         # A sequence contains an ordered set of consecutive frames
@@ -65,7 +66,7 @@ class SocialModel():
         self.lr = tf.Variable(args.learning_rate, trainable=False, name="learning_rate")
 
         # Output dimension of the model
-        self.output_size = 5
+        self.output_size = 2
 
         # Define embedding and output layers
         self.define_embedding_and_output_layers(args)
@@ -140,6 +141,7 @@ class SocialModel():
                     # Concatenate the embeddings
                     if self.mode != 'naive':
                         complete_input = tf.concat([embedded_spatial_input, embedded_tensor_input], 1)
+                        # complete_input = tf.concat([embedded_spatial_input], 1)
                     else:
                         complete_input = embedded_spatial_input
 
@@ -159,13 +161,14 @@ class SocialModel():
                     [x_data, y_data] = tf.split(tf.slice(frame_target_data[frame_num], [ped, 1], [1, 2]), 2, 1)
                     target_pedID = frame_target_data[frame_num][ped, 0]
 
-                with tf.name_scope("get_coef"):
-                    # Extract coef from output of the linear output layer
-                    [o_mux, o_muy, o_sx, o_sy, o_corr] = self.get_coef(self.initial_output[ped])
+                # with tf.name_scope("get_coef"):
+                #     # Extract coef from output of the linear output layer
+                #     [o_mux, o_muy, o_sx, o_sy, o_corr] = self.get_coef(self.initial_output[ped])
 
                 with tf.name_scope("calculate_loss"):
                     # Calculate loss for the current ped
-                    lossfunc = self.get_lossfunc(o_mux, o_muy, o_sx, o_sy, o_corr, x_data, y_data)
+                    # lossfunc = self.get_lossfunc(o_mux, o_muy, o_sx, o_sy, o_corr, x_data, y_data)
+                    lossfunc = self.simple_lossfunc(self.initial_output[ped][0][0], self.initial_output[ped][0][1], x_data, y_data)
 
                 with tf.name_scope("increment_cost"):
                     # If it is a non-existent ped, it should not contribute to cost
@@ -276,6 +279,10 @@ class SocialModel():
         # Sum up all log probabilities for each data point
         return tf.reduce_sum(result1)
 
+    def simple_lossfunc(self, predicted_x, predicted_y, x, y):
+        cost = tf.sqrt(tf.square((predicted_x - x)[0][0]) + tf.square((predicted_y - y)[0][0]))
+        return cost
+
     def get_coef(self, output):
         # eq 20 -> 22 of Graves (2013)
         z = output
@@ -330,77 +337,77 @@ class SocialModel():
             social_tensor = tf.reshape(social_tensor, [self.args.maxNumPeds, self.grid_size*self.grid_size*self.rnn_size])
         return social_tensor
 
-    def sample_gaussian_2d(self, mux, muy, sx, sy, rho):
-        '''
-        Function to sample a point from a given 2D normal distribution
-        params:
-        mux : mean of the distribution in x
-        muy : mean of the distribution in y
-        sx : std dev of the distribution in x
-        sy : std dev of the distribution in y
-        rho : Correlation factor of the distribution
-        '''
-        # Extract mean
-        mean = [mux, muy]
-        # Extract covariance matrix
-        cov = [[sx*sx, rho*sx*sy], [rho*sx*sy, sy*sy]]
-        # Sample a point from the multivariate normal distribution
-        x = np.random.multivariate_normal(mean, cov, 1)
-        return x[0][0], x[0][1]
+    # def sample_gaussian_2d(self, mux, muy, sx, sy, rho):
+    #     '''
+    #     Function to sample a point from a given 2D normal distribution
+    #     params:
+    #     mux : mean of the distribution in x
+    #     muy : mean of the distribution in y
+    #     sx : std dev of the distribution in x
+    #     sy : std dev of the distribution in y
+    #     rho : Correlation factor of the distribution
+    #     '''
+    #     # Extract mean
+    #     mean = [mux, muy]
+    #     # Extract covariance matrix
+    #     cov = [[sx*sx, rho*sx*sy], [rho*sx*sy, sy*sy]]
+    #     # Sample a point from the multivariate normal distribution
+    #     x = np.random.multivariate_normal(mean, cov, 1)
+    #     return x[0][0], x[0][1]
 
-    def sample(self, sess, traj, grid, dimensions, true_traj, num=10):
-        # traj is a sequence of frames (of length obs_length)
-        # so traj shape is (obs_length x maxNumPeds x 3)
-        # grid is a tensor of shape obs_length x maxNumPeds x maxNumPeds x (gs**2)
-        states = sess.run(self.LSTM_states)
-        # print "Fitting"
-        # For each frame in the sequence
-        for index, frame in enumerate(traj[:-1]):
-            data = np.reshape(frame, (1, self.maxNumPeds, 3))
-            target_data = np.reshape(traj[index+1], (1, self.maxNumPeds, 3))
-            grid_data = np.reshape(grid[index, :], (1, self.maxNumPeds, self.maxNumPeds, self.grid_size*self.grid_size))
+    # def sample(self, sess, traj, grid, dimensions, true_traj, num=10):
+    #     # traj is a sequence of frames (of length obs_length)
+    #     # so traj shape is (obs_length x maxNumPeds x 3)
+    #     # grid is a tensor of shape obs_length x maxNumPeds x maxNumPeds x (gs**2)
+    #     states = sess.run(self.LSTM_states)
+    #     # print "Fitting"
+    #     # For each frame in the sequence
+    #     for index, frame in enumerate(traj[:-1]):
+    #         data = np.reshape(frame, (1, self.maxNumPeds, 3))
+    #         target_data = np.reshape(traj[index+1], (1, self.maxNumPeds, 3))
+    #         grid_data = np.reshape(grid[index, :], (1, self.maxNumPeds, self.maxNumPeds, self.grid_size*self.grid_size))
 
-            feed = {self.input_data: data, self.LSTM_states: states, self.grid_data: grid_data, self.target_data: target_data}
+    #         feed = {self.input_data: data, self.LSTM_states: states, self.grid_data: grid_data, self.target_data: target_data}
 
-            [states, cost] = sess.run([self.final_states, self.cost], feed)
-            # print cost
+    #         [states, cost] = sess.run([self.final_states, self.cost], feed)
+    #         # print cost
 
-        ret = traj
+    #     ret = traj
 
-        last_frame = traj[-1]
+    #     last_frame = traj[-1]
 
-        prev_data = np.reshape(last_frame, (1, self.maxNumPeds, 3))
-        prev_grid_data = np.reshape(grid[-1], (1, self.maxNumPeds, self.maxNumPeds, self.grid_size*self.grid_size))
+    #     prev_data = np.reshape(last_frame, (1, self.maxNumPeds, 3))
+    #     prev_grid_data = np.reshape(grid[-1], (1, self.maxNumPeds, self.maxNumPeds, self.grid_size*self.grid_size))
 
-        prev_target_data = np.reshape(true_traj[traj.shape[0]], (1, self.maxNumPeds, 3))
-        # Prediction
-        for t in range(num):
-            print "**** NEW PREDICTION TIME STEP", t, "****"
-            feed = {self.input_data: prev_data, self.LSTM_states: states, self.grid_data: prev_grid_data, self.target_data: prev_target_data}
-            [output, states, cost] = sess.run([self.final_output, self.final_states, self.cost], feed)
-            print "Cost", cost
-            # Output is a list of lists where the inner lists contain matrices of shape 1x5. The outer list contains only one element (since seq_length=1) and the inner list contains maxNumPeds elements
-            # output = output[0]
-            newpos = np.zeros((1, self.maxNumPeds, 3))
-            for pedindex, pedoutput in enumerate(output):
-                [o_mux, o_muy, o_sx, o_sy, o_corr] = np.split(pedoutput[0], 5, 0)
-                mux, muy, sx, sy, corr = o_mux[0], o_muy[0], np.exp(o_sx[0]), np.exp(o_sy[0]), np.tanh(o_corr[0])
+    #     prev_target_data = np.reshape(true_traj[traj.shape[0]], (1, self.maxNumPeds, 3))
+    #     # Prediction
+    #     for t in range(num):
+    #         print "**** NEW PREDICTION TIME STEP", t, "****"
+    #         feed = {self.input_data: prev_data, self.LSTM_states: states, self.grid_data: prev_grid_data, self.target_data: prev_target_data}
+    #         [output, states, cost] = sess.run([self.final_output, self.final_states, self.cost], feed)
+    #         print "Cost", cost
+    #         # Output is a list of lists where the inner lists contain matrices of shape 1x5. The outer list contains only one element (since seq_length=1) and the inner list contains maxNumPeds elements
+    #         # output = output[0]
+    #         newpos = np.zeros((1, self.maxNumPeds, 3))
+    #         for pedindex, pedoutput in enumerate(output):
+    #             [o_mux, o_muy, o_sx, o_sy, o_corr] = np.split(pedoutput[0], 5, 0)
+    #             mux, muy, sx, sy, corr = o_mux[0], o_muy[0], np.exp(o_sx[0]), np.exp(o_sy[0]), np.tanh(o_corr[0])
 
-                next_x, next_y = self.sample_gaussian_2d(mux, muy, sx, sy, corr)
+    #             next_x, next_y = self.sample_gaussian_2d(mux, muy, sx, sy, corr)
 
-                if prev_data[0, pedindex, 0] != 0:
-                    print "Pedestrian ID", prev_data[0, pedindex, 0]
-                    print "Predicted parameters", mux, muy, sx, sy, corr
-                    print "New Position", next_x, next_y
-                    print "Target Position", prev_target_data[0, pedindex, 1], prev_target_data[0, pedindex, 2]
-                    print
+    #             if prev_data[0, pedindex, 0] != 0:
+    #                 print "Pedestrian ID", prev_data[0, pedindex, 0]
+    #                 print "Predicted parameters", mux, muy, sx, sy, corr
+    #                 print "New Position", next_x, next_y
+    #                 print "Target Position", prev_target_data[0, pedindex, 1], prev_target_data[0, pedindex, 2]
+    #                 print
 
-                newpos[0, pedindex, :] = [prev_data[0, pedindex, 0], next_x, next_y]
-            ret = np.vstack((ret, newpos))
-            prev_data = newpos
-            prev_grid_data = getSequenceGridMask(prev_data, dimensions, self.args.neighborhood_size, self.grid_size)
-            if t != num - 1:
-                prev_target_data = np.reshape(true_traj[traj.shape[0] + t + 1], (1, self.maxNumPeds, 3))
+    #             newpos[0, pedindex, :] = [prev_data[0, pedindex, 0], next_x, next_y]
+    #         ret = np.vstack((ret, newpos))
+    #         prev_data = newpos
+    #         prev_grid_data = getSequenceGridMask(prev_data, dimensions, self.args.neighborhood_size, self.grid_size)
+    #         if t != num - 1:
+    #             prev_target_data = np.reshape(true_traj[traj.shape[0] + t + 1], (1, self.maxNumPeds, 3))
 
-        # The returned ret is of shape (obs_length+pred_length) x maxNumPeds x 3
-        return ret
+    #     # The returned ret is of shape (obs_length+pred_length) x maxNumPeds x 3
+    #     return ret
