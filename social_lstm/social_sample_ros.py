@@ -31,7 +31,7 @@ class Social_Lstm_Prediction():
         self.obs_length = 8
         self.pred_length = 12
         self.prev_length = 12
-        self.max_pedestrians = 40
+        self.max_pedestrians = 50
         self.dimensions = [640, 480]
         self.time_resolution = 0.5
 

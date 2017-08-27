@@ -30,8 +30,15 @@ def main():
     parser.add_argument('--batch_size', type=int, default=10,
                         help='minibatch size')
     # Length of sequence to be considered parameter
-    parser.add_argument('--seq_length', type=int, default=8,
+    parser.add_argument('--seq_length', type=int, default=20,
                         help='RNN sequence length')
+    # Length of sequence to be considered parameter
+    parser.add_argument('--obs_length', type=int, default=8,
+                        help='Observed length of frames in a sequence')
+    # Length of sequence to be considered parameter
+    parser.add_argument('--pred_length', type=int, default=8,
+                        help='Predicted length of frames in a sequence')
+
     # Number of epochs parameter
     parser.add_argument('--num_epochs', type=int, default=50,
                         help='number of epochs')
@@ -71,6 +78,8 @@ def main():
                         required=False, default=None, help='GPU to run on')
     parser.add_argument('--mode', type=str, default='social', 
                         help='social, occupancy, naive')
+
+
     args = parser.parse_args()
     train(args)
 

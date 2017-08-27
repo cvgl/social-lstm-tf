@@ -106,75 +106,96 @@ class SocialModel():
             nonexistent_ped = tf.constant(0.0, name="zero_ped")
 
         # Iterate over each frame in the sequence
-        for frame_num, frame in enumerate(seq_data):
+        for frame_num in range(args.seq_length - args.obs_length - args.pred_length):
+            
+            # Fit the obs_length and predict pred_length steps
+            newpos = tf.zeros([args.maxNumPeds, 3])
 
-            current_frame_data = frame  # MNP x 3 tensor
-            current_grid_frame_data = grid_frame_data[frame_num]  # MNP x MNP x (GS**2) tensor
-            # MNP x (GS**2 * RNN_size) or MNP x GS**2
-            if self.mode != 'naive':
-                social_tensor = self.getSocialTensor(current_grid_frame_data, self.hidden_states)  
+            for frame_num_in_seq in range(args.obs_length + args.pred_length):
+                if frame_num_in_seq < args.obs_length - 1:
+                    is_pred = False
+                else:
+                    is_pred = True
 
-            for ped in range(args.maxNumPeds):
-                #print "Pedestrian Number", ped
+                abs_frame_index = frame_num + frame_num_in_seq
+                if abs_frame_index >= args.seq_length - 1:
+                    break
 
-                # pedID of the current pedestrian
-                pedID = current_frame_data[ped, 0]
+                current_frame_data = seq_data[abs_frame_index]  # MNP x 3 tensor
+                if frame_num_in_seq >= args.obs_length:
+                    current_frame_data = newpos
+                current_grid_frame_data = grid_frame_data[abs_frame_index]  # MNP x MNP x (GS**2) tensor
 
-                with tf.name_scope("extract_input_ped"):
-                    # Extract x and y positions of the current ped
-                    self.spatial_input = tf.slice(current_frame_data, [ped, 1], [1, 2])  # Tensor of shape (1,2)
-                    # Extract the social tensor of the current ped
-                    if self.mode == 'social':
-                        # Tensor of shape (1, g*g*r)
-                        self.tensor_input = tf.slice(social_tensor, [ped, 0], [1, args.grid_size*args.grid_size*args.rnn_size])  
-                    elif self.mode == 'occupancy':
-                        self.tensor_input = tf.expand_dims(social_tensor[ped], 0)
+                if self.mode != 'naive':
+                    social_tensor = self.getSocialTensor(current_grid_frame_data, self.hidden_states)  
 
-                with tf.name_scope("embeddings_operations"):
-                    # Embed the spatial input
-                    embedded_spatial_input = tf.nn.relu(tf.nn.xw_plus_b(self.spatial_input, self.embedding_w, self.embedding_b))
-                    # Embed the tensor input
-                    if self.mode != 'naive':
-                        embedded_tensor_input = tf.nn.relu(tf.nn.xw_plus_b(self.tensor_input, self.embedding_t_w, self.embedding_t_b))
+                for ped in range(args.maxNumPeds):
+                    # print "Pedestrian Number", ped
 
-                with tf.name_scope("concatenate_embeddings"):
-                    # Concatenate the embeddings
-                    if self.mode != 'naive':
-                        complete_input = tf.concat([embedded_spatial_input, embedded_tensor_input], 1)
-                        # complete_input = tf.concat([embedded_spatial_input], 1)
-                    else:
-                        complete_input = embedded_spatial_input
+                    # pedID of the current pedestrian
+                    pedID = current_frame_data[ped, 0]
 
-                # One step of LSTM
-                with tf.variable_scope("LSTM") as scope:
-                    if frame_num > 0 or ped > 0:
-                        scope.reuse_variables()
-                    self.hidden_states[ped], self.cell_states[ped] = cell(complete_input, self.cell_states[ped])
+                    with tf.name_scope("extract_input_ped"):
+                        # Extract x and y positions of the current ped
+                        self.spatial_input = tf.slice(current_frame_data, [ped, 1], [1, 2])  # Tensor of shape (1,2)
+                        # Extract the social tensor of the current ped
+                        if self.mode == 'social':
+                            # Tensor of shape (1, g*g*r)
+                            self.tensor_input = tf.slice(social_tensor, [ped, 0], [1, args.grid_size*args.grid_size*args.rnn_size])  
+                        elif self.mode == 'occupancy':
+                            self.tensor_input = tf.expand_dims(social_tensor[ped], 0)
 
-                # Apply the linear layer. Output would be a tensor of shape 1 x output_size
-                with tf.name_scope("output_linear_layer"):
-                    self.initial_output[ped] = tf.nn.xw_plus_b(self.hidden_states[ped], self.output_w, self.output_b)
+                    with tf.name_scope("embeddings_operations"):
+                        # Embed the spatial input
+                        embedded_spatial_input = tf.nn.relu(tf.nn.xw_plus_b(self.spatial_input, self.embedding_w, self.embedding_b))
+                        # Embed the tensor input
+                        if self.mode != 'naive':
+                            embedded_tensor_input = tf.nn.relu(tf.nn.xw_plus_b(self.tensor_input, self.embedding_t_w, self.embedding_t_b))
 
-                with tf.name_scope("extract_target_ped"):
-                    # Extract x and y coordinates of the target data
-                    # x_data and y_data would be tensors of shape 1 x 1
-                    [x_data, y_data] = tf.split(tf.slice(frame_target_data[frame_num], [ped, 1], [1, 2]), 2, 1)
-                    target_pedID = frame_target_data[frame_num][ped, 0]
+                    with tf.name_scope("concatenate_embeddings"):
+                        # Concatenate the embeddings
+                        if self.mode != 'naive':
+                            complete_input = tf.concat([embedded_spatial_input, embedded_tensor_input], 1)
+                            # complete_input = tf.concat([embedded_spatial_input], 1)
+                        else:
+                            complete_input = embedded_spatial_input
 
-                # with tf.name_scope("get_coef"):
-                #     # Extract coef from output of the linear output layer
-                #     [o_mux, o_muy, o_sx, o_sy, o_corr] = self.get_coef(self.initial_output[ped])
+                    # One step of LSTM
+                    with tf.variable_scope("LSTM") as scope:
+                        if frame_num > 0 or frame_num_in_seq > 0 or ped > 0:
+                            scope.reuse_variables()
+                        self.hidden_states[ped], self.cell_states[ped] = cell(complete_input, self.cell_states[ped])
 
-                with tf.name_scope("calculate_loss"):
-                    # Calculate loss for the current ped
-                    # lossfunc = self.get_lossfunc(o_mux, o_muy, o_sx, o_sy, o_corr, x_data, y_data)
-                    lossfunc = self.simple_lossfunc(self.initial_output[ped][0][0], self.initial_output[ped][0][1], x_data, y_data)
+                    # Apply the linear layer. Output would be a tensor of shape 1 x output_size
+                    with tf.name_scope("output_linear_layer"):
+                        self.initial_output[ped] = tf.nn.xw_plus_b(self.hidden_states[ped], self.output_w, self.output_b)
+                        ped_position_tensor = tf.reshape([pedID, self.initial_output[ped][0][0], self.initial_output[ped][0][1]], [1, -1])
+                        if ped == 0:
+                            newpos = ped_position_tensor
+                        else:
+                            newpos = tf.concat([newpos, ped_position_tensor], axis=0)
+                    
+                    with tf.name_scope("extract_target_ped"):
+                        # Extract x and y coordinates of the target data
+                        # x_data and y_data would be tensors of shape 1 x 1
+                        [x_data, y_data] = tf.split(tf.slice(frame_target_data[abs_frame_index], [ped, 1], [1, 2]), 2, 1)
+                        target_pedID = frame_target_data[abs_frame_index][ped, 0]
 
-                with tf.name_scope("increment_cost"):
-                    # If it is a non-existent ped, it should not contribute to cost
-                    # If the ped doesn't exist in the next frame, he/she should not contribute to cost as well
-                    self.cost = tf.where(tf.logical_or(tf.equal(pedID, nonexistent_ped), tf.equal(target_pedID, nonexistent_ped)), self.cost, tf.add(self.cost, lossfunc))
-                    self.counter = tf.where(tf.logical_or(tf.equal(pedID, nonexistent_ped), tf.equal(target_pedID, nonexistent_ped)), self.counter, tf.add(self.counter, self.increment))
+                    # with tf.name_scope("get_coef"):
+                    #     # Extract coef from output of the linear output layer
+                    #     [o_mux, o_muy, o_sx, o_sy, o_corr] = self.get_coef(self.initial_output[ped])
+
+                    with tf.name_scope("calculate_loss"):
+                        # Calculate loss for the current ped
+                        # lossfunc = self.get_lossfunc(o_mux, o_muy, o_sx, o_sy, o_corr, x_data, y_data)
+                        lossfunc = self.simple_lossfunc(self.initial_output[ped][0][0], self.initial_output[ped][0][1], x_data, y_data)
+
+                    with tf.name_scope("increment_cost"):
+                        # If it is a non-existent ped, it should not contribute to cost
+                        # If the ped doesn't exist in the next frame, he/she should not contribute to cost as well
+                        if is_pred:
+                            self.cost = tf.where(tf.logical_or(tf.equal(pedID, nonexistent_ped), tf.equal(target_pedID, nonexistent_ped)), self.cost, tf.add(self.cost, lossfunc))
+                            self.counter = tf.where(tf.logical_or(tf.equal(pedID, nonexistent_ped), tf.equal(target_pedID, nonexistent_ped)), self.counter, tf.add(self.counter, self.increment))
 
         with tf.name_scope("mean_cost"):
             # Mean of the cost
@@ -223,6 +244,50 @@ class SocialModel():
         with tf.variable_scope("output_layer"):
             self.output_w = tf.get_variable("output_w", [args.rnn_size, self.output_size], initializer=tf.truncated_normal_initializer(stddev=0.1))
             self.output_b = tf.get_variable("output_b", [self.output_size], initializer=tf.constant_initializer(0.1))
+
+    def simple_lossfunc(self, predicted_x, predicted_y, x, y):
+        cost = tf.sqrt(tf.square((predicted_x - x)[0][0]) + tf.square((predicted_y - y)[0][0]))
+        return cost
+
+    def getSocialTensor(self, grid_frame_data, hidden_state_list):
+        '''
+        Computes the social tensor for all the maxNumPeds in the frame
+        params:
+        grid_frame_data : A tensor of shape MNP x MNP x (GS**2)
+        hidden_state_list : A list of tensors each of shape 1 x RNN_size of length MNP
+        '''
+        # Create a zero tensor of shape MNP x (GS**2) x RNN_size
+        social_tensor = tf.zeros([self.args.maxNumPeds, self.grid_size*self.grid_size, self.rnn_size], name="social_tensor")
+        # Create a list of zero tensors each of shape 1 x (GS**2) x RNN_size of length MNP
+        social_tensor = tf.split(social_tensor, self.args.maxNumPeds, 0)
+        # Concatenate list of hidden states to form a tensor of shape MNP x RNN_size * 2
+        hidden_states = tf.concat(hidden_state_list, 0)
+        # Split the grid_frame_data into grid_data for each pedestrians
+        # Consists of a list of tensors each of shape 1 x MNP x (GS**2) of length MNP
+        grid_frame_ped_data = tf.split(grid_frame_data, self.args.maxNumPeds, 0)
+        # Squeeze tensors to form MNP x (GS**2) matrices
+        grid_frame_ped_data = [tf.squeeze(input_, [0]) for input_ in grid_frame_ped_data]
+
+        # For each pedestrian
+        for ped in range(self.args.maxNumPeds):
+            # Compute social tensor for the current pedestrian
+            with tf.name_scope("tensor_calculation"):
+                if self.mode == 'social':
+                    social_tensor_ped = tf.matmul(tf.transpose(grid_frame_ped_data[ped]), hidden_states)
+                    social_tensor[ped] = tf.reshape(social_tensor_ped, [1, self.grid_size*self.grid_size, self.rnn_size])
+                elif self.mode == 'occupancy':
+                    social_tensor_ped = tf.reduce_sum(grid_frame_ped_data[ped], 0)
+                    social_tensor[ped] = tf.expand_dims(social_tensor_ped, 0)
+                else:
+                    exit("Function getSocialTensor should not be called in naive mode")
+        # Concatenate the social tensor from a list to a tensor of shape
+        # social : MNP x (GS**2) x RNN_size
+        # occupancy : MNP x (GS**2)
+        social_tensor = tf.concat(social_tensor, 0)
+        # Reshape the tensor to match the dimensions MNP x (GS**2 * RNN_size)
+        if self.mode == 'social':
+            social_tensor = tf.reshape(social_tensor, [self.args.maxNumPeds, self.grid_size*self.grid_size*self.rnn_size])
+        return social_tensor
 
     def tf_2d_normal(self, x, y, mux, muy, sx, sy, rho):
         '''
@@ -279,10 +344,6 @@ class SocialModel():
         # Sum up all log probabilities for each data point
         return tf.reduce_sum(result1)
 
-    def simple_lossfunc(self, predicted_x, predicted_y, x, y):
-        cost = tf.sqrt(tf.square((predicted_x - x)[0][0]) + tf.square((predicted_y - y)[0][0]))
-        return cost
-
     def get_coef(self, output):
         # eq 20 -> 22 of Graves (2013)
         z = output
@@ -297,117 +358,78 @@ class SocialModel():
 
         return [z_mux, z_muy, z_sx, z_sy, z_corr]
 
-    def getSocialTensor(self, grid_frame_data, hidden_state_list):
+    def sample_gaussian_2d(self, mux, muy, sx, sy, rho):
         '''
-        Computes the social tensor for all the maxNumPeds in the frame
+        Function to sample a point from a given 2D normal distribution
         params:
-        grid_frame_data : A tensor of shape MNP x MNP x (GS**2)
-        hidden_state_list : A list of tensors each of shape 1 x RNN_size of length MNP
+        mux : mean of the distribution in x
+        muy : mean of the distribution in y
+        sx : std dev of the distribution in x
+        sy : std dev of the distribution in y
+        rho : Correlation factor of the distribution
         '''
-        # Create a zero tensor of shape MNP x (GS**2) x RNN_size
-        social_tensor = tf.zeros([self.args.maxNumPeds, self.grid_size*self.grid_size, self.rnn_size], name="social_tensor")
-        # Create a list of zero tensors each of shape 1 x (GS**2) x RNN_size of length MNP
-        social_tensor = tf.split(social_tensor, self.args.maxNumPeds, 0)
-        # Concatenate list of hidden states to form a tensor of shape MNP x RNN_size * 2
-        hidden_states = tf.concat(hidden_state_list, 0)
-        # Split the grid_frame_data into grid_data for each pedestrians
-        # Consists of a list of tensors each of shape 1 x MNP x (GS**2) of length MNP
-        grid_frame_ped_data = tf.split(grid_frame_data, self.args.maxNumPeds, 0)
-        # Squeeze tensors to form MNP x (GS**2) matrices
-        grid_frame_ped_data = [tf.squeeze(input_, [0]) for input_ in grid_frame_ped_data]
+        # Extract mean
+        mean = [mux, muy]
+        # Extract covariance matrix
+        cov = [[sx*sx, rho*sx*sy], [rho*sx*sy, sy*sy]]
+        # Sample a point from the multivariate normal distribution
+        x = np.random.multivariate_normal(mean, cov, 1)
+        return x[0][0], x[0][1]
 
-        # For each pedestrian
-        for ped in range(self.args.maxNumPeds):
-            # Compute social tensor for the current pedestrian
-            with tf.name_scope("tensor_calculation"):
-                if self.mode == 'social':
-                    social_tensor_ped = tf.matmul(tf.transpose(grid_frame_ped_data[ped]), hidden_states)
-                    social_tensor[ped] = tf.reshape(social_tensor_ped, [1, self.grid_size*self.grid_size, self.rnn_size])
-                elif self.mode == 'occupancy':
-                    social_tensor_ped = tf.reduce_sum(grid_frame_ped_data[ped], 0)
-                    social_tensor[ped] = tf.expand_dims(social_tensor_ped, 0)
-                else:
-                    exit("Function getSocialTensor should not be called in naive mode")
-        # Concatenate the social tensor from a list to a tensor of shape
-        # social : MNP x (GS**2) x RNN_size
-        # occupancy : MNP x (GS**2)
-        social_tensor = tf.concat(social_tensor, 0)
-        # Reshape the tensor to match the dimensions MNP x (GS**2 * RNN_size)
-        if self.mode == 'social':
-            social_tensor = tf.reshape(social_tensor, [self.args.maxNumPeds, self.grid_size*self.grid_size*self.rnn_size])
-        return social_tensor
+    def sample(self, sess, traj, grid, dimensions, true_traj, num=10):
+        # traj is a sequence of frames (of length obs_length)
+        # so traj shape is (obs_length x maxNumPeds x 3)
+        # grid is a tensor of shape obs_length x maxNumPeds x maxNumPeds x (gs**2)
+        states = sess.run(self.LSTM_states)
+        # print "Fitting"
+        # For each frame in the sequence
+        for index, frame in enumerate(traj[:-1]):
+            data = np.reshape(frame, (1, self.maxNumPeds, 3))
+            target_data = np.reshape(traj[index+1], (1, self.maxNumPeds, 3))
+            grid_data = np.reshape(grid[index, :], (1, self.maxNumPeds, self.maxNumPeds, self.grid_size*self.grid_size))
 
-    # def sample_gaussian_2d(self, mux, muy, sx, sy, rho):
-    #     '''
-    #     Function to sample a point from a given 2D normal distribution
-    #     params:
-    #     mux : mean of the distribution in x
-    #     muy : mean of the distribution in y
-    #     sx : std dev of the distribution in x
-    #     sy : std dev of the distribution in y
-    #     rho : Correlation factor of the distribution
-    #     '''
-    #     # Extract mean
-    #     mean = [mux, muy]
-    #     # Extract covariance matrix
-    #     cov = [[sx*sx, rho*sx*sy], [rho*sx*sy, sy*sy]]
-    #     # Sample a point from the multivariate normal distribution
-    #     x = np.random.multivariate_normal(mean, cov, 1)
-    #     return x[0][0], x[0][1]
+            feed = {self.input_data: data, self.LSTM_states: states, self.grid_data: grid_data, self.target_data: target_data}
 
-    # def sample(self, sess, traj, grid, dimensions, true_traj, num=10):
-    #     # traj is a sequence of frames (of length obs_length)
-    #     # so traj shape is (obs_length x maxNumPeds x 3)
-    #     # grid is a tensor of shape obs_length x maxNumPeds x maxNumPeds x (gs**2)
-    #     states = sess.run(self.LSTM_states)
-    #     # print "Fitting"
-    #     # For each frame in the sequence
-    #     for index, frame in enumerate(traj[:-1]):
-    #         data = np.reshape(frame, (1, self.maxNumPeds, 3))
-    #         target_data = np.reshape(traj[index+1], (1, self.maxNumPeds, 3))
-    #         grid_data = np.reshape(grid[index, :], (1, self.maxNumPeds, self.maxNumPeds, self.grid_size*self.grid_size))
+            [states, cost] = sess.run([self.final_states, self.cost], feed)
+            # print cost
 
-    #         feed = {self.input_data: data, self.LSTM_states: states, self.grid_data: grid_data, self.target_data: target_data}
+        ret = traj
 
-    #         [states, cost] = sess.run([self.final_states, self.cost], feed)
-    #         # print cost
+        last_frame = traj[-1]
 
-    #     ret = traj
+        prev_data = np.reshape(last_frame, (1, self.maxNumPeds, 3))
+        prev_grid_data = np.reshape(grid[-1], (1, self.maxNumPeds, self.maxNumPeds, self.grid_size*self.grid_size))
 
-    #     last_frame = traj[-1]
+        prev_target_data = np.reshape(true_traj[traj.shape[0]], (1, self.maxNumPeds, 3))
+        # Prediction
+        for t in range(num):
+            print "**** NEW PREDICTION TIME STEP", t, "****"
+            feed = {self.input_data: prev_data, self.LSTM_states: states, self.grid_data: prev_grid_data, self.target_data: prev_target_data}
+            [output, states, cost] = sess.run([self.final_output, self.final_states, self.cost], feed)
+            print "Cost", cost
+            # Output is a list of lists where the inner lists contain matrices of shape 1x5. The outer list contains only one element (since seq_length=1)
+            # The inner list contains maxNumPeds elements
+            # output = output[0]
+            newpos = np.zeros((1, self.maxNumPeds, 3))
+            for pedindex, pedoutput in enumerate(output):
+                [o_mux, o_muy, o_sx, o_sy, o_corr] = np.split(pedoutput[0], 5, 0)
+                mux, muy, sx, sy, corr = o_mux[0], o_muy[0], np.exp(o_sx[0]), np.exp(o_sy[0]), np.tanh(o_corr[0])
 
-    #     prev_data = np.reshape(last_frame, (1, self.maxNumPeds, 3))
-    #     prev_grid_data = np.reshape(grid[-1], (1, self.maxNumPeds, self.maxNumPeds, self.grid_size*self.grid_size))
+                next_x, next_y = self.sample_gaussian_2d(mux, muy, sx, sy, corr)
 
-    #     prev_target_data = np.reshape(true_traj[traj.shape[0]], (1, self.maxNumPeds, 3))
-    #     # Prediction
-    #     for t in range(num):
-    #         print "**** NEW PREDICTION TIME STEP", t, "****"
-    #         feed = {self.input_data: prev_data, self.LSTM_states: states, self.grid_data: prev_grid_data, self.target_data: prev_target_data}
-    #         [output, states, cost] = sess.run([self.final_output, self.final_states, self.cost], feed)
-    #         print "Cost", cost
-    #         # Output is a list of lists where the inner lists contain matrices of shape 1x5. The outer list contains only one element (since seq_length=1) and the inner list contains maxNumPeds elements
-    #         # output = output[0]
-    #         newpos = np.zeros((1, self.maxNumPeds, 3))
-    #         for pedindex, pedoutput in enumerate(output):
-    #             [o_mux, o_muy, o_sx, o_sy, o_corr] = np.split(pedoutput[0], 5, 0)
-    #             mux, muy, sx, sy, corr = o_mux[0], o_muy[0], np.exp(o_sx[0]), np.exp(o_sy[0]), np.tanh(o_corr[0])
+                if prev_data[0, pedindex, 0] != 0:
+                    print "Pedestrian ID", prev_data[0, pedindex, 0]
+                    print "Predicted parameters", mux, muy, sx, sy, corr
+                    print "New Position", next_x, next_y
+                    print "Target Position", prev_target_data[0, pedindex, 1], prev_target_data[0, pedindex, 2]
+                    print
 
-    #             next_x, next_y = self.sample_gaussian_2d(mux, muy, sx, sy, corr)
+                newpos[0, pedindex, :] = [prev_data[0, pedindex, 0], next_x, next_y]
+            ret = np.vstack((ret, newpos))
+            prev_data = newpos
+            prev_grid_data = getSequenceGridMask(prev_data, dimensions, self.args.neighborhood_size, self.grid_size)
+            if t != num - 1:
+                prev_target_data = np.reshape(true_traj[traj.shape[0] + t + 1], (1, self.maxNumPeds, 3))
 
-    #             if prev_data[0, pedindex, 0] != 0:
-    #                 print "Pedestrian ID", prev_data[0, pedindex, 0]
-    #                 print "Predicted parameters", mux, muy, sx, sy, corr
-    #                 print "New Position", next_x, next_y
-    #                 print "Target Position", prev_target_data[0, pedindex, 1], prev_target_data[0, pedindex, 2]
-    #                 print
-
-    #             newpos[0, pedindex, :] = [prev_data[0, pedindex, 0], next_x, next_y]
-    #         ret = np.vstack((ret, newpos))
-    #         prev_data = newpos
-    #         prev_grid_data = getSequenceGridMask(prev_data, dimensions, self.args.neighborhood_size, self.grid_size)
-    #         if t != num - 1:
-    #             prev_target_data = np.reshape(true_traj[traj.shape[0] + t + 1], (1, self.maxNumPeds, 3))
-
-    #     # The returned ret is of shape (obs_length+pred_length) x maxNumPeds x 3
-    #     return ret
+        # The returned ret is of shape (obs_length+pred_length) x maxNumPeds x 3
+        return ret
