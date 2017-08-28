@@ -43,7 +43,7 @@ def main():
     parser.add_argument('--num_epochs', type=int, default=50,
                         help='number of epochs')
     # Frequency at which the model should be saved parameter
-    parser.add_argument('--save_every', type=int, default=400,
+    parser.add_argument('--save_every', type=int, default=100,
                         help='save frequency')
     # TODO: (resolve) Clipping gradients for now. No idea whether we should
     # Gradient value at which it should be clipped
@@ -105,6 +105,7 @@ def train(args):
     log_path = os.path.join(save_path, 'log')
     if not os.path.isdir(log_path):
         os.makedirs(log_path)
+    
     # Create the SocialDataLoader object
     data_loader = SocialDataLoader(args.batch_size, args.seq_length,
             args.maxNumPeds, dataset_path, forcePreProcess=True)
@@ -142,6 +143,7 @@ def train(args):
 
                 # variable to store the loss for this batch
                 loss_batch = 0
+                counter = 0
 
                 # For each sequence in the batch
                 for seq_num in range(data_loader.batch_size):
@@ -150,31 +152,38 @@ def train(args):
                     # s_seq, t_seq would be numpy arrays of size seq_length x maxNumPeds x 3
                     # d_batch would be a scalar identifying the dataset from which this sequence is extracted
                     s_seq, t_seq, d_seq = s_batch[seq_num], t_batch[seq_num], d[seq_num]
+                    
                     '''
                     if d_seq == 0 and datasets[0] == 0:
                         dataset_data = [640, 480]
                     else:
                         dataset_data = [720, 576]
                     '''
-                    grid_batch = getSequenceGridMask(s_seq, [0, 0], args.neighborhood_size, args.grid_size)
-                    
-                    print '------------------------------------------------------------------------------'
-                    for frame_index in range(args.seq_length):
-                        print s_seq[frame_index, 0:10, :]
-                    # print grid_batch[0, 1, 2, :]
 
-                    # Feed the source, target data
-                    feed = {model.input_data: s_seq, model.target_data: t_seq, model.grid_data: grid_batch}
+                    for starting_frame_index in range(args.seq_length - args.obs_length - args.pred_length):
+                        sub_s_seq = s_seq[starting_frame_index:starting_frame_index + args.obs_length + args.pred_length, :, :]
+                        sub_t_seq = t_seq[starting_frame_index:starting_frame_index + args.obs_length + args.pred_length, :, :]
 
-                    train_loss, _ = sess.run([model.cost, model.train_op], feed)
+                        grid_batch = getSequenceGridMask(sub_s_seq, [0, 0], args.neighborhood_size, args.grid_size)
+                        
+                        print 'Processing frame sequence starting from ' + str(starting_frame_index) + '.....................'
+                        # for frame_index in range(args.seq_length):
+                        #     print s_seq[frame_index, 0:10, :]
 
-                    loss_batch += train_loss
+                        # Feed the source, target data
+                        feed = {model.input_data: sub_s_seq, model.target_data: sub_t_seq, model.grid_data: grid_batch}
+
+                        train_loss, train_counter, _ = sess.run([model.cost, model.counter, model.train_op], feed)
+
+                        loss_batch += train_loss
+
+                        counter += train_counter
 
                 end = time.time()
-                loss_batch = loss_batch / data_loader.batch_size
+                loss_batch = loss_batch / counter
                 all_loss.append(loss_batch)
                 print(
-                    "{}/{} (epoch {}), train_loss = {:.3f}, time/seq_num = {:.3f}"
+                    "{}/{} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}"
                     .format(
                         e * data_loader.num_batches + b,
                         args.num_epochs * data_loader.num_batches,

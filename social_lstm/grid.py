@@ -67,7 +67,6 @@ def getGridMask(frame, dimensions, neighborhood_size, grid_size):
 
     return frame_mask
 
-
 def getSequenceGridMask(sequence, dimensions, neighborhood_size, grid_size):
     '''
     Get the grid masks for all the frames in the sequence

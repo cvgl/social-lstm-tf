@@ -10,7 +10,7 @@ from social_utils import SocialDataLoader
 from social_model import SocialModel
 from grid import getSequenceGridMask
 # from social_train import getSocialGrid, getSocialTensor
-CHK_DIR = '/vision/u/agupta/social-lstm-tf/social_lstm/checkpoints'
+CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/test-checkpoints/'
 
 def make_save_path(args):
     folder_name = args.mode
@@ -69,7 +69,7 @@ def main():
     parser.add_argument('--obs_length', type=int, default=8,
                         help='Observed length of the trajectory')
     # Predicted length of the trajectory parameter
-    parser.add_argument('--pred_length', type=int, default=12,
+    parser.add_argument('--pred_length', type=int, default=8,
                         help='Predicted length of the trajectory')
     # Test dataset
     parser.add_argument('--test_dataset', type=str,
@@ -137,7 +137,7 @@ def main():
         # obs_traj is an array of shape obs_length x maxNumPeds x 3
 
         print "********************** SAMPLING A NEW TRAJECTORY", b, "******************************"
-        complete_traj = model.sample(sess, obs_traj, obs_grid, [0,0], x_batch, sample_args.pred_length)
+        complete_traj = model.sample(sess, obs_traj, x_batch, grid_batch, y_batch, [0,0], sample_args.pred_length)
 
         # ipdb.set_trace()
         # complete_traj is an array of shape (obs_length+pred_length) x maxNumPeds x 3
