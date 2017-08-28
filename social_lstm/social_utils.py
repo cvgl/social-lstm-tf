@@ -16,7 +16,7 @@ import random
 # sequence.
 class SocialDataLoader():
 
-    def __init__(self, batch_size=50, seq_length=5, maxNumPeds=40,
+    def __init__(self, batch_size=50, seq_length=5, maxNumPeds=60,
             dataset_path='../data', forcePreProcess=False):
         '''
         Initialiser function for the SocialDataLoader class
@@ -201,6 +201,9 @@ class SocialDataLoader():
                 # Number of unique peds in this sequence of frames
                 pedID_list = np.unique(seq_frame_data[:, :, 0])
                 numUniquePeds = pedID_list.shape[0]
+                
+                if numUniquePeds > self.maxNumPeds:
+                    numUniquePeds = self.maxNumPeds
 
                 sourceData = np.zeros((self.seq_length, self.maxNumPeds, 3))
                 targetData = np.zeros((self.seq_length, self.maxNumPeds, 3))

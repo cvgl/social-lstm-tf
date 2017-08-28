@@ -10,8 +10,8 @@ from social_model import SocialModel
 from social_utils import SocialDataLoader
 from grid import getSequenceGridMask
 
-# CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/social-lstm-checkpoints/'
-CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/test-checkpoints/'
+CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/social-lstm-checkpoints/'
+# CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/test-checkpoints/'
 
 def main():
     parser = argparse.ArgumentParser()
@@ -43,7 +43,7 @@ def main():
     parser.add_argument('--num_epochs', type=int, default=50,
                         help='number of epochs')
     # Frequency at which the model should be saved parameter
-    parser.add_argument('--save_every', type=int, default=100,
+    parser.add_argument('--save_every', type=int, default=200,
                         help='save frequency')
     # TODO: (resolve) Clipping gradients for now. No idea whether we should
     # Gradient value at which it should be clipped
@@ -69,7 +69,7 @@ def main():
     parser.add_argument('--grid_size', type=int, default=4,
                         help='Grid size of the social grid')
     # Maximum number of pedestrians to be considered
-    parser.add_argument('--maxNumPeds', type=int, default=50,
+    parser.add_argument('--maxNumPeds', type=int, default=60,
                         help='Maximum Number of Pedestrians')
 
     parser.add_argument('--dataset_path', type=str, default='./../data/',
