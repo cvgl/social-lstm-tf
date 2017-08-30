@@ -10,8 +10,8 @@ from social_model import SocialModel
 from social_utils import SocialDataLoader
 from grid import getSequenceGridMask
 
-CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/social-lstm-checkpoints/'
-# CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/test-checkpoints/'
+# CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/social-lstm-checkpoints/'
+CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/test-checkpoints/'
 
 def main():
     parser = argparse.ArgumentParser()
@@ -78,6 +78,7 @@ def main():
                         required=False, default=None, help='GPU to run on')
     parser.add_argument('--mode', type=str, default='social', 
                         help='social, occupancy, naive')
+    parser.add_argument('--model_path', type=str)
 
 
     args = parser.parse_args()
@@ -100,7 +101,11 @@ def train(args):
     if args.visible:
         os.environ["CUDA_VISIBLE_DEVICES"] = args.visible
 
-    save_path = make_save_path(args)
+    if args.model_path:
+        save_path = args.model_path
+    else:
+        save_path = make_save_path(args)
+    
     dataset_path = args.dataset_path
     log_path = os.path.join(save_path, 'log')
     if not os.path.isdir(log_path):
@@ -109,6 +114,8 @@ def train(args):
     # Create the SocialDataLoader object
     data_loader = SocialDataLoader(args.batch_size, args.seq_length,
             args.maxNumPeds, dataset_path, forcePreProcess=True)
+    print data_loader.num_batches
+    # print data_loader.next_batch()
 
     with open(os.path.join(save_path, 'social_config.pkl'), 'wb') as f:
         pickle.dump(args, f)
@@ -118,11 +125,24 @@ def train(args):
     all_loss = []
     # Initialize a TensorFlow session
     with tf.Session() as sess:
-        # Initialize all variables in the graph
-        sess.run(tf.initialize_all_variables())
-        # Initialize a saver that saves all the variables in the graph
-        saver = tf.train.Saver(tf.all_variables())
-        summary_writer = tf.summary.FileWriter(log_path, sess.graph)
+        # Get the checkpoint state for the model
+        ckpt = tf.train.get_checkpoint_state(save_path)
+
+        if ckpt:
+            # Restore the model at the checkpoint
+            print ('loading model: ', ckpt.model_checkpoint_path)
+            
+            # Initialize a saver that saves all the variables in the graph
+            saver = tf.train.Saver()
+            summary_writer = tf.summary.FileWriter(log_path, sess.graph)
+            saver.restore(sess, ckpt.model_checkpoint_path)
+        else:
+            print 'initializing variables....'
+            
+            # Initialize all variables in the graph
+            sess.run(tf.global_variables_initializer())
+            saver = tf.train.Saver(tf.global_variables())
+            summary_writer = tf.summary.FileWriter(log_path, sess.graph)
 
         # For each epoch
         for e in range(args.num_epochs):
@@ -159,14 +179,13 @@ def train(args):
                     else:
                         dataset_data = [720, 576]
                     '''
-
+                    print 'Processing frame sequence ' + str(seq_num) + '.....................'
                     for starting_frame_index in range(args.seq_length - args.obs_length - args.pred_length):
                         sub_s_seq = s_seq[starting_frame_index:starting_frame_index + args.obs_length + args.pred_length, :, :]
                         sub_t_seq = t_seq[starting_frame_index:starting_frame_index + args.obs_length + args.pred_length, :, :]
 
                         grid_batch = getSequenceGridMask(sub_s_seq, [0, 0], args.neighborhood_size, args.grid_size)
                         
-                        print 'Processing frame sequence starting from ' + str(starting_frame_index) + '.....................'
                         # for frame_index in range(args.seq_length):
                         #     print s_seq[frame_index, 0:10, :]
 

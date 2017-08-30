@@ -10,6 +10,9 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pickle
+import os
+
+CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/social-lstm-checkpoints/social/08_28_00_45'
 
 
 def plot_trajectories(true_trajs, pred_trajs, obs_length, name):
@@ -29,12 +32,10 @@ def plot_trajectories(true_trajs, pred_trajs, obs_length, name):
     plt.figure()
 
     # Load the background
-    im = plt.imread('plot/background.png')
-    implot = plt.imshow(im)
-    width = im.shape[0]
-    height = im.shape[1]
-    # width = 1
-    # height = 1
+    # im = plt.imread('plot/background.png')
+    # implot = plt.imshow(im)
+    width = 1
+    height = 1
 
     traj_data = {}
     # For each frame/each point in all trajectories
@@ -52,10 +53,10 @@ def plot_trajectories(true_trajs, pred_trajs, obs_length, name):
                 continue
             else:
                 # If he is a ped
-                if true_pos[j, 1] > 1 or true_pos[j, 1] < 0:
-                    continue
-                elif true_pos[j, 2] > 1 or true_pos[j, 2] < 0:
-                    continue
+                # if true_pos[j, 1] > 1 or true_pos[j, 1] < 0:
+                #     continue
+                # elif true_pos[j, 2] > 1 or true_pos[j, 2] < 0:
+                #     continue
 
                 if (j not in traj_data) and i < obs_length:
                     traj_data[j] = [[], []]
@@ -64,8 +65,9 @@ def plot_trajectories(true_trajs, pred_trajs, obs_length, name):
                     traj_data[j][0].append(true_pos[j, 1:3])
                     traj_data[j][1].append(pred_pos[j, 1:3])
 
+    plt.axis([-30, 30, -30, 30])  
     for j in traj_data:
-        c = np.random.rand(3, 1)
+        c = np.random.rand(3, )
         true_traj_ped = traj_data[j][0]  # List of [x,y] elements
         pred_traj_ped = traj_data[j][1]
 
@@ -73,23 +75,27 @@ def plot_trajectories(true_trajs, pred_trajs, obs_length, name):
         true_y = [p[1]*width for p in true_traj_ped]
         pred_x = [p[0]*height for p in pred_traj_ped]
         pred_y = [p[1]*width for p in pred_traj_ped]
-
-        plt.plot(true_x, true_y, color=c, linestyle='solid', marker='o')
-        plt.plot(pred_x, pred_y, color=c, linestyle='dashed', marker='x')
+        print true_x
+        s = [2 for n in range(16)]
+        s2 = [4 for n in range(16)]
+        plt.scatter(true_x, true_y, color=c, marker='o',  s=s )
+        plt.scatter(pred_x, pred_y, color=c, marker='x', s=s2)
+        # plt.show()
 
     # plt.ylim((0, 1))
     # plt.xlim((0, 1))
-    # plt.show()
-    plt.savefig('plot/'+name+'.png')
-    plt.gcf().clear()
-    plt.close()
+    if traj_data:
+        plt.show()
+        plt.savefig('plot/'+name+'.svg')
+        plt.gcf().clear()
+        plt.close()
 
 
 def main():
     '''
     Main function
     '''
-    f = open('save/social_results.pkl', 'rb')
+    f = open(os.path.join(CHK_DIR, 'social_results.pkl'), 'rb')
     results = pickle.load(f)
 
     for i in range(len(results)):

@@ -31,13 +31,16 @@ def get_mean_error(predicted_traj, true_traj, observed_length, maxNumPeds):
     # The data structure to store all errors
     error = np.zeros(len(true_traj) - observed_length)
     # For each point in the predicted part of the trajectory
+
+    total_error = 0.0
+    counter = 0.0
     for i in range(observed_length, len(true_traj)):
         # The predicted position. This will be a maxNumPeds x 3 matrix
         pred_pos = predicted_traj[i, :]
         # The true position. This will be a maxNumPeds x 3 matrix
         true_pos = true_traj[i, :]
-        timestep_error = 0
-        counter = 0
+        # timestep_error = 0
+        # counter = 0
         for j in range(maxNumPeds):
             if true_pos[j, 0] == 0:
                 # Non-existent ped
@@ -46,17 +49,19 @@ def get_mean_error(predicted_traj, true_traj, observed_length, maxNumPeds):
                 # Ped comes in the prediction time. Not seen in observed part
                 continue
             else:
-                timestep_error += np.linalg.norm(true_pos[j, [1, 2]] - pred_pos[j, [1, 2]])
+                # timestep_error += np.linalg.norm(true_pos[j, [1, 2]] - pred_pos[j, [1, 2]])
+                total_error += np.linalg.norm(true_pos[j, [1, 2]] - pred_pos[j, [1, 2]])
                 counter += 1
 
-        if counter != 0:
-            error[i - observed_length] = timestep_error / counter
+        # if counter != 0:
+        #     error[i - observed_length] = timestep_error / counter
 
         # The euclidean distance is the error
         # error[i-observed_length] = np.linalg.norm(true_pos - pred_pos)
 
     # Return the mean error
-    return np.mean(error)
+    # return np.mean(error)
+    return total_error, counter
 
 
 def main():
@@ -115,7 +120,9 @@ def main():
     results = []
 
     # Variable to maintain total error
-    total_error = 0
+    total_error = 0.0
+    total_counter = 0.0
+    
     # For each batch
     for b in range(data_loader.num_batches):
         # Get the source, target and dataset data for the next batch
@@ -133,15 +140,16 @@ def main():
         grid_batch = getSequenceGridMask(x_batch, [0,0], saved_args.neighborhood_size, saved_args.grid_size)
 
         obs_traj = x_batch[:sample_args.obs_length]
-        obs_grid = grid_batch[:sample_args.obs_length]
         # obs_traj is an array of shape obs_length x maxNumPeds x 3
 
-        print "********************** SAMPLING A NEW TRAJECTORY", b, "******************************"
-        complete_traj = model.sample(sess, obs_traj, x_batch, grid_batch, y_batch, [0,0], sample_args.pred_length)
+        # print "********************** SAMPLING A NEW TRAJECTORY", b, "******************************"
+        complete_traj = model.sample(sess, obs_traj, x_batch, grid_batch, [0,0], sample_args.pred_length)
 
         # ipdb.set_trace()
         # complete_traj is an array of shape (obs_length+pred_length) x maxNumPeds x 3
-        total_error += get_mean_error(complete_traj, x[0], sample_args.obs_length, saved_args.maxNumPeds)
+        error, counter = get_mean_error(complete_traj, x[0], sample_args.obs_length, saved_args.maxNumPeds)
+        total_error += error
+        total_counter += counter
 
         print "Processed trajectory number : ", b, "out of ", data_loader.num_batches, " trajectories"
 
@@ -150,7 +158,7 @@ def main():
         results.append((x[0], complete_traj, sample_args.obs_length))
 
     # Print the mean error across all the batches
-    print "Total mean error of the model is ", total_error/data_loader.num_batches
+    print "Total mean error of the model is ", total_error/total_counter
 
     print "Saving results"
     with open(os.path.join(save_path, 'social_results.pkl'), 'wb') as f:

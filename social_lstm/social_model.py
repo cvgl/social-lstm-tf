@@ -117,13 +117,14 @@ class SocialModel():
             else:
                 is_pred = True
 
-            current_frame_data = seq_data[frame_num]  # MNP x 3 tensor
-            current_grid_frame_data = grid_frame_data[frame_num]  # MNP x MNP x (GS**2) tensor
-
             if frame_num >= args.obs_length:
                 current_frame_data = newpos
                 current_grid_frame_data = grid_frame_data[args.obs_length - 1]
+                # current_grid_frame_data = tf.zeros([args.maxNumPeds, args.maxNumPeds, args.grid_size * args.grid_size])
                 # current_grid_frame_data = getSequenceGridMask_tf(newpos, [0, 0], args.neighborhood_size, args.grid_size)
+            else:
+                current_frame_data = seq_data[frame_num]  # MNP x 3 tensor
+                current_grid_frame_data = grid_frame_data[frame_num]  # MNP x MNP x (GS**2) tensor
         
             if self.mode != 'naive':
                 social_tensor = self.getSocialTensor(current_grid_frame_data, self.hidden_states)  
@@ -154,7 +155,6 @@ class SocialModel():
                     # Concatenate the embeddings
                     if self.mode != 'naive':
                         complete_input = tf.concat([embedded_spatial_input, embedded_tensor_input], 1)
-                        # complete_input = tf.concat([embedded_spatial_input], 1)
                     else:
                         complete_input = embedded_spatial_input
 
@@ -434,9 +434,9 @@ class SocialModel():
     #     return ret
 
 
-    def sample(self, sess, obs_traj, traj, grid, target, dimensions, num=10):
+    def sample(self, sess, obs_traj, traj, grid, dimensions, num=10):
         ret = obs_traj
-        feed = {self.input_data: traj, self.grid_data: grid, self.target_data: target}
-        [pred_traj, cost] = sess.run([self.pred_traj, self.cost], feed)
+        feed = {self.input_data: traj, self.grid_data: grid}
+        [pred_traj] = sess.run([self.pred_traj], feed)
         ret = np.vstack((ret, np.array(pred_traj)))
         return ret
