@@ -29,6 +29,7 @@ class Social_Lstm_Prediction():
 
         self.obs_length = 8
         self.pred_length = 8
+        self.frame_interval = 6
         self.max_pedestrians = 60
         self.dimensions = [0, 0]
         self.time_resolution = 0.5
@@ -57,7 +58,8 @@ class Social_Lstm_Prediction():
         self.id_index_dict = {}
         self.vacant_rows = range(self.max_pedestrians)
         self.frame_num = 0
-        self.obs_sequence = np.zeros((self.obs_length, self.max_pedestrians, 3))
+        self.obs_sequence = np.zeros((self.obs_length * self.frame_interval + self.frame_interval/2, self.max_pedestrians, 3))
+        self.interpolated_obs_sequence = np.zeros((self.obs_length, self.max_pedestrians, 3))
 
         self.tracked_persons_sub = rospy.Subscriber("/tracked_persons", TrackedPersons, self.predict)
         self.pedestrian_prediction_pub = rospy.Publisher("/predicted_persons", PeoplePrediction, queue_size=1)
@@ -85,17 +87,15 @@ class Social_Lstm_Prediction():
         rospy.loginfo("Ready.")
 
     def predict(self, tracked_persons):
-        self.frame_num += 1
         tracks = tracked_persons.tracks
-        # print tracks
-
         if len(tracks) == 0:
             return
 
+        self.frame_num += 1
         print 'before delete: ', self.obs_sequence.shape
         self.obs_sequence = np.delete(self.obs_sequence, 0, axis=0)
         print 'after delete: ', self.obs_sequence.shape
-        if self.frame_num >= self.obs_length:
+        if self.frame_num > self.obs_sequence.shape[0]:
             existing_track_ids = self.obs_sequence[:, :, 0]
             for track_id in self.id_index_dict.keys():
                 if track_id not in existing_track_ids:
@@ -105,8 +105,6 @@ class Social_Lstm_Prediction():
 
         curr_frame = np.zeros((1, self.max_pedestrians, 3))
         for track in tracks:
-            # print track
-            # print track.pose.pose.position.x
             track_id = track.track_id
             if track_id in self.id_index_dict:
                 row_index = self.id_index_dict[track_id]
@@ -118,15 +116,34 @@ class Social_Lstm_Prediction():
 
         self.obs_sequence = np.concatenate((self.obs_sequence, curr_frame), axis=0)
 
-        if self.frame_num < self.obs_length:
+        if self.frame_num < self.obs_sequence.shape[0]:
             return
 
+        # Generate interpolated obs_sequence
+        for step in range(self.obs_length, 0, -1):
+            end_step = step * self.frame_interval + self.frame_interval/2 - 1
+            start_step = end_step - self.frame_interval
+            curr_seq = self.obs_sequence[start_step: end_step + 1, :, :]
+
+            mean_seq_cords = np.mean(curr_seq[:, :, 1:], axis=0)
+            all_zeros_rows = np.where(~mean_seq_cords.any(axis=1))[0]
+            
+            non_zeros_rows = np.where(mean_seq_cords.any(axis=1))[0]
+            print non_zeros_rows
+            nonzeros = np.nonzero(curr_seq[:, :, 0])
+            print np.unique(nonzeros[1])
+            if step < self.obs_length:
+                mean_seq_cords[all_zeros_rows, :] = self.interpolated_obs_sequence[step, all_zeros_rows, 1:]
+
+            self.interpolated_obs_sequence[step - 1, :, 1:] = mean_seq_cords
+            self.interpolated_obs_sequence[step - 1, nonzeros[1], 0] = curr_seq[nonzeros[0], nonzeros[1], 0]
+
         print self.obs_sequence.shape
-        x_batch = np.concatenate((self.obs_sequence, np.zeros((self.pred_length, self.max_pedestrians, 3))), axis=0)
+        x_batch = np.concatenate((self.interpolated_obs_sequence, np.zeros((self.pred_length, self.max_pedestrians, 3))), axis=0)
         grid_batch = getSequenceGridMask(x_batch, self.dimensions, self.saved_args.neighborhood_size, self.saved_args.grid_size)
 
         print "********************** PREDICT NEW TRAJECTORY ******************************"
-        complete_traj = self.social_lstm_model.sample(self.sess, self.obs_sequence, x_batch, grid_batch, self.dimensions, self.pred_length)
+        complete_traj = self.social_lstm_model.sample(self.sess, self.interpolated_obs_sequence, x_batch, grid_batch, self.dimensions, self.pred_length)
         
         # Initialize the markers array
         prediction_markers = MarkerArray()
