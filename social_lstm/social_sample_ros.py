@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import rospy
 import sys
 import os
@@ -19,11 +21,11 @@ from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker, MarkerArray
 
 CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/social-lstm-checkpoints/social/08_28_00_45'
+#CHK_DIR = '/home/patrick/jr_catkin_ws/src/social-lstm-tf/social_lstm/checkpoints/social/08_28_00_45/'
 
 class Social_Lstm_Prediction():
     def __init__(self):
         self.node_name = 'social_lstm'
-
         rospy.init_node(self.node_name)
         rospy.on_shutdown(self.cleanup)
 
@@ -37,13 +39,17 @@ class Social_Lstm_Prediction():
         # Define the path for the config file for saved args
         with open(os.path.join(CHK_DIR, 'social_config.pkl'), 'rb') as f:
             self.saved_args = pickle.load(f)
+            
+        rospy.loginfo("Creating the model.  This can take about 10 minutes...")
 
         # Create a SocialModel object with the saved_args and infer set to true
         self.social_lstm_model = SocialModel(self.saved_args, True)
         
+        rospy.loginfo("Model created.")
+
         # Initialize a TensorFlow session
         self.sess = tf.InteractiveSession()
-        
+
         # Initialize a saver
         saver = tf.train.Saver()
 
@@ -61,33 +67,22 @@ class Social_Lstm_Prediction():
         self.obs_sequence = np.zeros((self.obs_length * self.frame_interval + self.frame_interval/2, self.max_pedestrians, 3))
         self.interpolated_obs_sequence = np.zeros((self.obs_length, self.max_pedestrians, 3))
 
-        self.tracked_persons_sub = rospy.Subscriber("/tracked_persons", TrackedPersons, self.predict)
-        self.pedestrian_prediction_pub = rospy.Publisher("/predicted_persons", PeoplePrediction, queue_size=1)
-        self.prediction_marker_pub = rospy.Publisher("/predicted_persons_marker_array", MarkerArray, queue_size=1)
+        self.tracked_persons_sub = rospy.Subscriber("tracked_persons", TrackedPersons, self.predict)
+        self.pedestrian_prediction_pub = rospy.Publisher("predicted_persons", PeoplePrediction, queue_size=1)
+        self.prediction_marker_pub = rospy.Publisher("predicted_persons_marker_array", MarkerArray, queue_size=1)
         
-        # Initialize the marker for people prediction
-        self.prediction_marker = Marker()
-        self.prediction_marker.type = Marker.SPHERE
-        self.prediction_marker.action = Marker.MODIFY
-        self.prediction_marker.ns = "people_predictions"
-        self.prediction_marker.pose.orientation.w = 1
-        self.prediction_marker.color.r = 0
-        self.prediction_marker.color.g = 0
-        self.prediction_marker.color.b = 0.5
-        self.prediction_marker.scale.x = 0.2
-        self.prediction_marker.scale.y = 0.2
-        self.prediction_marker.scale.z = 0.2
-
         # self.prev_frames = []
         # for i in range(self.prev_length):
         #     self.prev_frames.append({})
 
         rospy.loginfo("Waiting for tracked persons...")
-        rospy.wait_for_message("/predicted_persons", PeoplePrediction)
         rospy.loginfo("Ready.")
 
     def predict(self, tracked_persons):
         tracks = tracked_persons.tracks
+        
+        print "Number of people being tracked: ", len(tracks)
+
         if len(tracks) == 0:
             return
 
@@ -148,42 +143,60 @@ class Social_Lstm_Prediction():
         # Initialize the markers array
         prediction_markers = MarkerArray()
 
-        # Publish them
+        # Initialize the people predictions message
         people_predictions = PeoplePrediction()
+        
         for frame_index in range(self.pred_length):
-            people = People()
-            people.header.stamp = tracked_persons.header.stamp + rospy.Duration(frame_index * self.time_resolution);
-            people.header.frame_id = tracked_persons.header.frame_id
+            people_one_time_step = People()
+            people_one_time_step.header.stamp = tracked_persons.header.stamp + rospy.Duration(frame_index * self.time_resolution);
+            people_one_time_step.header.frame_id = tracked_persons.header.frame_id
+            #people_one_time_step.header.frame_id = "sibot/base_link"
             
             predicted_frame_index = frame_index + self.obs_length
+            
             for person_index in range(self.max_pedestrians):
                 track_id = complete_traj[predicted_frame_index, person_index, 0]
+                
+                if track_id == 0:
+                   continue
+               
                 x_coord = complete_traj[predicted_frame_index, person_index, 1]
                 y_coord = complete_traj[predicted_frame_index, person_index, 2]
-                if track_id == 0:
-                    continue
 
-                person = Person()
-                person.name = str(track_id)
+                person_one_time_step = Person()
+                person_one_time_step.name = str(track_id)
 
                 point = Point()
                 point.x = x_coord
                 point.y = y_coord
-                person.position = point
-                people.people.append(person)
+                person_one_time_step.position = point
+                people_one_time_step.people.append(person_one_time_step)
                 
-                self.prediction_marker.header.frame_id = tracked_persons.header.frame_id
-                self.prediction_marker.header.stamp = tracked_persons.header.stamp
-                self.prediction_marker.id = int(track_id);
-                self.prediction_marker.pose.position.x = person.position.x
-                self.prediction_marker.pose.position.y = person.position.y
-                # self.prediction_marker.color.a = 1 - (frame_index * 1.0 / (self.pred_length * 1.0))
-                self.prediction_marker.color.a = 1.0
-                prediction_markers.markers.append(self.prediction_marker)
+                prediction_marker = Marker()
+                prediction_marker.type = Marker.SPHERE
+                prediction_marker.action = Marker.MODIFY
+                prediction_marker.ns = "predictor"
+                prediction_marker.pose.orientation.w = 1
+                prediction_marker.color.r = 0
+                prediction_marker.color.g = 0
+                prediction_marker.color.b = 0.5
+                prediction_marker.scale.x = 0.2
+                prediction_marker.scale.y = 0.2
+                prediction_marker.scale.z = 0.2
+                
+                prediction_marker.header.stamp = tracked_persons.header.stamp
+                prediction_marker.header.frame_id = tracked_persons.header.frame_id
+                #prediction_marker.header.frame_id = "sibot/base_link"
+                prediction_marker.id = int(frame_index + person_index * self.pred_length)
+                prediction_marker.pose.position.x = person_one_time_step.position.x
+                prediction_marker.pose.position.y = person_one_time_step.position.y
+                #prediction_marker.color.a = 1 - (frame_index * 1.0 / (self.pred_length * 1.0))
+                prediction_marker.color.a = 1.0
+                prediction_markers.markers.append(prediction_marker)
 
-            people_predictions.predicted_people.append(people)
+            people_predictions.predicted_people.append(people_one_time_step)
      
-        print people_predictions 
+        #print people_predictions 
 
         self.pedestrian_prediction_pub.publish(people_predictions)
         self.prediction_marker_pub.publish(prediction_markers)
@@ -203,7 +216,7 @@ class Social_Lstm_Prediction():
             >>> nans, x= nan_helper(y)
             >>> y[nans]= np.interp(x(nans), x(~nans), y[~nans])
         """
-
+print
         return np.isnan(y), lambda z: z.nonzero()[0]
 
 
@@ -229,7 +242,7 @@ class Social_Lstm_Prediction():
         whole_array = []
         for i in range(num_tracks):
             track = tracks[i]
-            track_id = track.track_id
+            print track_id = track.track_id
             
             history_positions_x = []
             history_positions_y = []
