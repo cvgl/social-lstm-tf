@@ -10,8 +10,8 @@ from social_model import SocialModel
 from social_utils import SocialDataLoader
 from grid import getSequenceGridMask
 
-# CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/social-lstm-checkpoints/'
-CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/test-checkpoints/'
+CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/social-lstm-obs-4-checkpoints'
+# CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/test-checkpoints/'
 
 def main():
     parser = argparse.ArgumentParser()
@@ -33,14 +33,14 @@ def main():
     parser.add_argument('--seq_length', type=int, default=20,
                         help='RNN sequence length')
     # Length of sequence to be considered parameter
-    parser.add_argument('--obs_length', type=int, default=8,
+    parser.add_argument('--obs_length', type=int, default=4,
                         help='Observed length of frames in a sequence')
     # Length of sequence to be considered parameter
     parser.add_argument('--pred_length', type=int, default=8,
                         help='Predicted length of frames in a sequence')
 
     # Number of epochs parameter
-    parser.add_argument('--num_epochs', type=int, default=50,
+    parser.add_argument('--num_epochs', type=int, default=25,
                         help='number of epochs')
     # Frequency at which the model should be saved parameter
     parser.add_argument('--save_every', type=int, default=200,

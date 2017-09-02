@@ -108,7 +108,7 @@ class SocialModel():
             self.pred_traj = tf.zeros([args.pred_length, args.maxNumPeds, 3])
 
         # Fit the obs_length and predict pred_length steps
-        newpos = tf.zeros([args.maxNumPeds, 3])
+        newpos = tf.zeros([1, args.maxNumPeds, 3])
 
         # Iterate over each frame in the sequence
         for frame_num in range(args.obs_length + args.pred_length - 1):

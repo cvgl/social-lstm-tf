@@ -4,6 +4,7 @@ import rospy
 import sys
 import os
 import argparse
+import time
 
 import numpy as np
 import tensorflow as tf
@@ -21,7 +22,8 @@ from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker, MarkerArray
 
 CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/social-lstm-checkpoints/social/08_28_00_45'
-#CHK_DIR = '/home/patrick/jr_catkin_ws/src/social-lstm-tf/social_lstm/checkpoints/social/08_28_00_45/'
+# CHK_DIR = '/home/patrick/jr_catkin_ws/src/social-lstm-tf/social_lstm/checkpoints/social/08_28_00_45/'
+# CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/social-lstm-obs-4-checkpoints/social/09_01_19_56/'
 
 class Social_Lstm_Prediction():
     def __init__(self):
@@ -34,7 +36,9 @@ class Social_Lstm_Prediction():
         self.frame_interval = 6
         self.max_pedestrians = 60
         self.dimensions = [0, 0]
-        self.time_resolution = 0.5
+        self.fps = 15
+        self.frame_interval_index = 0
+        self.time_resolution = float(self.frame_interval * self.obs_length / self.fps)
 
         # Define the path for the config file for saved args
         with open(os.path.join(CHK_DIR, 'social_config.pkl'), 'rb') as f:
@@ -65,9 +69,8 @@ class Social_Lstm_Prediction():
         self.vacant_rows = range(self.max_pedestrians)
         self.frame_num = 0
         self.obs_sequence = np.zeros((self.obs_length * self.frame_interval + self.frame_interval/2, self.max_pedestrians, 3))
-        self.interpolated_obs_sequence = np.zeros((self.obs_length, self.max_pedestrians, 3))
 
-        self.tracked_persons_sub = rospy.Subscriber("tracked_persons", TrackedPersons, self.predict)
+        self.tracked_persons_sub = rospy.Subscriber("tracked_persons", TrackedPersons, self.predict, queue_size=1)
         self.pedestrian_prediction_pub = rospy.Publisher("predicted_persons", PeoplePrediction, queue_size=1)
         self.prediction_marker_pub = rospy.Publisher("predicted_persons_marker_array", MarkerArray, queue_size=1)
         
@@ -79,23 +82,31 @@ class Social_Lstm_Prediction():
         rospy.loginfo("Ready.")
 
     def predict(self, tracked_persons):
-        tracks = tracked_persons.tracks
-        
-        print "Number of people being tracked: ", len(tracks)
+        print "********************** Processing new frame ******************************"
+        start_time = time.time()
 
-        if len(tracks) == 0:
-            return
+        # Initialize the markers array
+        prediction_markers = MarkerArray()
+
+        # Initialize the people predictions message
+        people_predictions = PeoplePrediction()
+
+        tracks = tracked_persons.tracks
+        track_ids = [track.track_id for track in tracks]
+
+        print "Number of people being tracked: ", len(tracks)
+        print 'track ids in current frame is ', track_ids
 
         self.frame_num += 1
-        print 'before delete: ', self.obs_sequence.shape
+        # self.frame_interval_index += 1
         self.obs_sequence = np.delete(self.obs_sequence, 0, axis=0)
-        print 'after delete: ', self.obs_sequence.shape
-        if self.frame_num > self.obs_sequence.shape[0]:
-            existing_track_ids = self.obs_sequence[:, :, 0]
-            for track_id in self.id_index_dict.keys():
-                if track_id not in existing_track_ids:
-                    self.vacant_rows.append(self.id_index_dict[track_id])
-                    del self.id_index_dict[track_id]
+        
+        existing_track_ids = self.obs_sequence[:, :, 0]
+        print 'existing track ids: ', existing_track_ids.shape, existing_track_ids
+        for track_id in self.id_index_dict.keys():
+            if track_id not in existing_track_ids:
+                self.vacant_rows.append(self.id_index_dict[track_id])
+                del self.id_index_dict[track_id]
 
 
         curr_frame = np.zeros((1, self.max_pedestrians, 3))
@@ -105,15 +116,22 @@ class Social_Lstm_Prediction():
                 row_index = self.id_index_dict[track_id]
             else:
                 row_index = self.vacant_rows[0]
+                print 'vacant row is: ', self.vacant_rows
                 del self.vacant_rows[0]
                 self.id_index_dict[track_id] = row_index
+            print 'row_index is: ', row_index
             curr_frame[0, row_index, :] = [track_id, track.pose.pose.position.x, track.pose.pose.position.y]
 
         self.obs_sequence = np.concatenate((self.obs_sequence, curr_frame), axis=0)
 
-        if self.frame_num < self.obs_sequence.shape[0]:
+        if len(tracks) == 0 or self.frame_num < self.obs_sequence.shape[0]: # or self.frame_interval_index < self.frame_interval:
+            self.pedestrian_prediction_pub.publish(people_predictions)
+            self.prediction_marker_pub.publish(prediction_markers)
             return
 
+        print "This is a predicting step............................"
+
+        interpolated_obs_sequence = np.zeros((self.obs_length, self.max_pedestrians, 3))
         # Generate interpolated obs_sequence
         for step in range(self.obs_length, 0, -1):
             end_step = step * self.frame_interval + self.frame_interval/2 - 1
@@ -128,36 +146,33 @@ class Social_Lstm_Prediction():
             nonzeros = np.nonzero(curr_seq[:, :, 0])
             print np.unique(nonzeros[1])
             if step < self.obs_length:
-                mean_seq_cords[all_zeros_rows, :] = self.interpolated_obs_sequence[step, all_zeros_rows, 1:]
+                mean_seq_cords[all_zeros_rows, :] = interpolated_obs_sequence[step, all_zeros_rows, 1:]
+                interpolated_obs_sequence[step - 1, all_zeros_rows, 0] = interpolated_obs_sequence[step, all_zeros_rows, 0]
 
-            self.interpolated_obs_sequence[step - 1, :, 1:] = mean_seq_cords
-            self.interpolated_obs_sequence[step - 1, nonzeros[1], 0] = curr_seq[nonzeros[0], nonzeros[1], 0]
+            interpolated_obs_sequence[step - 1, :, 1:] = mean_seq_cords
+            interpolated_obs_sequence[step - 1, nonzeros[1], 0] = curr_seq[nonzeros[0], nonzeros[1], 0]
 
-        print self.obs_sequence.shape
-        x_batch = np.concatenate((self.interpolated_obs_sequence, np.zeros((self.pred_length, self.max_pedestrians, 3))), axis=0)
+            # for seq_frame_index in range(self.frame_interval + 1):
+            #     for pedIndex in non_zeros_rows:
+            #         if curr_seq[seq_frame_index, pedIndex, 0] != 0:
+            #             self.interpolated_obs_sequence[step - 1, pedIndex, 0] = curr_seq[seq_frame_index, pedIndex, 0]
+
+        x_batch = np.concatenate((interpolated_obs_sequence, np.zeros((self.pred_length, self.max_pedestrians, 3))), axis=0)
         grid_batch = getSequenceGridMask(x_batch, self.dimensions, self.saved_args.neighborhood_size, self.saved_args.grid_size)
 
-        print "********************** PREDICT NEW TRAJECTORY ******************************"
-        complete_traj = self.social_lstm_model.sample(self.sess, self.interpolated_obs_sequence, x_batch, grid_batch, self.dimensions, self.pred_length)
-        
-        # Initialize the markers array
-        prediction_markers = MarkerArray()
+        complete_traj = self.social_lstm_model.sample(self.sess, interpolated_obs_sequence, x_batch, grid_batch, self.dimensions, self.pred_length)
 
-        # Initialize the people predictions message
-        people_predictions = PeoplePrediction()
-        
         for frame_index in range(self.pred_length):
             people_one_time_step = People()
-            people_one_time_step.header.stamp = tracked_persons.header.stamp + rospy.Duration(frame_index * self.time_resolution);
+            people_one_time_step.header.stamp = tracked_persons.header.stamp + rospy.Duration(frame_index * self.time_resolution)
             people_one_time_step.header.frame_id = tracked_persons.header.frame_id
-            #people_one_time_step.header.frame_id = "sibot/base_link"
             
             predicted_frame_index = frame_index + self.obs_length
             
             for person_index in range(self.max_pedestrians):
                 track_id = complete_traj[predicted_frame_index, person_index, 0]
                 
-                if track_id == 0:
+                if track_id not in track_ids:
                    continue
                
                 x_coord = complete_traj[predicted_frame_index, person_index, 1]
@@ -176,6 +191,7 @@ class Social_Lstm_Prediction():
                 prediction_marker.type = Marker.SPHERE
                 prediction_marker.action = Marker.MODIFY
                 prediction_marker.ns = "predictor"
+                prediction_marker.lifetime = rospy.Duration(0.1)
                 prediction_marker.pose.orientation.w = 1
                 prediction_marker.color.r = 0
                 prediction_marker.color.g = 0
@@ -186,7 +202,6 @@ class Social_Lstm_Prediction():
                 
                 prediction_marker.header.stamp = tracked_persons.header.stamp
                 prediction_marker.header.frame_id = tracked_persons.header.frame_id
-                #prediction_marker.header.frame_id = "sibot/base_link"
                 prediction_marker.id = int(frame_index + person_index * self.pred_length)
                 prediction_marker.pose.position.x = person_one_time_step.position.x
                 prediction_marker.pose.position.y = person_one_time_step.position.y
@@ -196,8 +211,10 @@ class Social_Lstm_Prediction():
 
             people_predictions.predicted_people.append(people_one_time_step)
      
-        #print people_predictions 
+        print people_predictions 
 
+        self.frame_interval_index = 0
+        print 'time spent for frame: ', time.time() - start_time
         self.pedestrian_prediction_pub.publish(people_predictions)
         self.prediction_marker_pub.publish(prediction_markers)
 
