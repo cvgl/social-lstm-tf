@@ -31,7 +31,7 @@ class Social_Lstm_Prediction():
         rospy.init_node(self.node_name)
         rospy.on_shutdown(self.cleanup)
 
-        self.obs_length = 8
+        self.obs_length = 4
         self.pred_length = 8
         self.frame_interval = 6
         self.max_pedestrians = 60

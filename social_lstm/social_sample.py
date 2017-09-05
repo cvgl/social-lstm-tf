@@ -71,7 +71,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     # Observed length of the trajectory parameter
-    parser.add_argument('--obs_length', type=int, default=8,
+    parser.add_argument('--obs_length', type=int, default=4,
                         help='Observed length of the trajectory')
     # Predicted length of the trajectory parameter
     parser.add_argument('--pred_length', type=int, default=8,
