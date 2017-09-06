@@ -61,8 +61,7 @@ def main():
     # Decay rate for the learning rate parameter
     parser.add_argument('--decay_rate', type=float, default=0.95,
                         help='decay rate for rmsprop')
-    # Dropout not implemented.
-    # Dropout probability parameter
+    # Dropout not implemented. Dropout probability parameter
     parser.add_argument('--keep_prob', type=float, default=0.8,
                         help='dropout keep probability')
 
