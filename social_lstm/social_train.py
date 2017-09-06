@@ -10,8 +10,7 @@ from social_model import SocialModel
 from social_utils import SocialDataLoader
 from grid import getSequenceGridMask
 
-CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/social-lstm-obs-4-checkpoints'
-# CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/test-checkpoints/'
+CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/checkpoints/test'
 
 def main():
     parser = argparse.ArgumentParser()
@@ -29,11 +28,16 @@ def main():
     # Size of each batch parameter
     parser.add_argument('--batch_size', type=int, default=10,
                         help='minibatch size')
+    # Dimension of the embeddings parameter
+    parser.add_argument('--embedding_size', type=int, default=64,
+                        help='Embedding dimension for the spatial coordinates')
+    
+    
     # Length of sequence to be considered parameter
     parser.add_argument('--seq_length', type=int, default=20,
                         help='RNN sequence length')
     # Length of sequence to be considered parameter
-    parser.add_argument('--obs_length', type=int, default=4,
+    parser.add_argument('--obs_length', type=int, default=8,
                         help='Observed length of frames in a sequence')
     # Length of sequence to be considered parameter
     parser.add_argument('--pred_length', type=int, default=8,
@@ -43,8 +47,10 @@ def main():
     parser.add_argument('--num_epochs', type=int, default=25,
                         help='number of epochs')
     # Frequency at which the model should be saved parameter
-    parser.add_argument('--save_every', type=int, default=200,
+    parser.add_argument('--save_every', type=int, default=50,
                         help='save frequency')
+    
+    
     # TODO: (resolve) Clipping gradients for now. No idea whether we should
     # Gradient value at which it should be clipped
     parser.add_argument('--grad_clip', type=float, default=10.,
@@ -59,12 +65,11 @@ def main():
     # Dropout probability parameter
     parser.add_argument('--keep_prob', type=float, default=0.8,
                         help='dropout keep probability')
-    # Dimension of the embeddings parameter
-    parser.add_argument('--embedding_size', type=int, default=64,
-                        help='Embedding dimension for the spatial coordinates')
+
+
     # Size of neighborhood to be considered parameter
     parser.add_argument('--neighborhood_size', type=float, default=32,
-                        help='Neighborhood size to be considered for social grid')
+                        help='Neighborhood size to be considered for social grid')   
     # Size of the social grid parameter
     parser.add_argument('--grid_size', type=int, default=4,
                         help='Grid size of the social grid')
@@ -76,7 +81,7 @@ def main():
                         help='Path training data')
     parser.add_argument('--visible',type=str,
                         required=False, default=None, help='GPU to run on')
-    parser.add_argument('--mode', type=str, default='social', 
+    parser.add_argument('--mode', type=str, default='naive', 
                         help='social, occupancy, naive')
     parser.add_argument('--model_path', type=str)
 
@@ -115,7 +120,6 @@ def train(args):
     data_loader = SocialDataLoader(args.batch_size, args.seq_length,
             args.maxNumPeds, dataset_path, forcePreProcess=True)
     print data_loader.num_batches
-    # print data_loader.next_batch()
 
     with open(os.path.join(save_path, 'social_config.pkl'), 'wb') as f:
         pickle.dump(args, f)
@@ -123,6 +127,7 @@ def train(args):
     # Create a SocialModel object with the arguments
     model = SocialModel(args)
     all_loss = []
+    
     # Initialize a TensorFlow session
     with tf.Session() as sess:
         # Get the checkpoint state for the model

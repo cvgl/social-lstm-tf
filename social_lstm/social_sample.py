@@ -65,13 +65,12 @@ def get_mean_error(predicted_traj, true_traj, observed_length, maxNumPeds):
 
 
 def main():
-
     # Set random seed
     np.random.seed(1)
 
     parser = argparse.ArgumentParser()
     # Observed length of the trajectory parameter
-    parser.add_argument('--obs_length', type=int, default=4,
+    parser.add_argument('--obs_length', type=int, default=8,
                         help='Observed length of the trajectory')
     # Predicted length of the trajectory parameter
     parser.add_argument('--pred_length', type=int, default=8,
@@ -82,7 +81,6 @@ def main():
 
     parser.add_argument('--visible',type=str,
                         required=False, default=None, help='GPU to run on')
-
     parser.add_argument('--model_path', type=str)
     # Parse the parameters
     sample_args = parser.parse_args()
@@ -105,7 +103,7 @@ def main():
 
     # Get the checkpoint state for the model
     ckpt = tf.train.get_checkpoint_state(save_path)
-    print ('loading model: ', ckpt.model_checkpoint_path)
+    print ('Loading model: ', ckpt.model_checkpoint_path)
 
     # Restore the model at the checkpoint
     saver.restore(sess, ckpt.model_checkpoint_path)
@@ -131,30 +129,19 @@ def main():
         # Batch size is 1
         x_batch, y_batch, d_batch = x[0], y[0], d[0]
 
-        '''
-        if d_batch == 0 and dataset[0] == 0:
-            dimensions = [640, 480]
-        else:
-            dimensions = [720, 576]
-        '''
         grid_batch = getSequenceGridMask(x_batch, [0,0], saved_args.neighborhood_size, saved_args.grid_size)
 
-        obs_traj = x_batch[:sample_args.obs_length]
         # obs_traj is an array of shape obs_length x maxNumPeds x 3
+        obs_traj = x_batch[:sample_args.obs_length]
 
-        # print "********************** SAMPLING A NEW TRAJECTORY", b, "******************************"
         complete_traj = model.sample(sess, obs_traj, x_batch, grid_batch, [0,0], sample_args.pred_length)
 
-        # ipdb.set_trace()
         # complete_traj is an array of shape (obs_length+pred_length) x maxNumPeds x 3
         error, counter = get_mean_error(complete_traj, x[0], sample_args.obs_length, saved_args.maxNumPeds)
         total_error += error
         total_counter += counter
 
         print "Processed trajectory number : ", b, "out of ", data_loader.num_batches, " trajectories"
-
-        # plot_trajectories(x[0], complete_traj, sample_args.obs_length)
-        # return
         results.append((x[0], complete_traj, sample_args.obs_length))
 
     # Print the mean error across all the batches
