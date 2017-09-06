@@ -111,6 +111,7 @@ def main():
     # Create a SocialDataLoader object with batch_size 1 and seq_length equal to observed_length + pred_length
     data_loader = SocialDataLoader(1, sample_args.pred_length +
             sample_args.obs_length, saved_args.maxNumPeds, sample_args.test_dataset, True)
+    print 'Number of batches: ', data_loader.num_batches
 
     # Reset all pointers of the data_loader
     data_loader.reset_batch_pointer()
