@@ -127,13 +127,13 @@ class SocialModel():
 
             if frame_num >= args.obs_length:
                 current_frame_data = newpos
-                # current_grid_frame_data = grid_frame_data[args.obs_length - 1]
+                current_grid_frame_data = grid_frame_data[args.obs_length - 1]
             else:
                 current_frame_data = seq_data[frame_num] # MNP x 3 tensor
-                # current_grid_frame_data = grid_frame_data[frame_num]  # MNP x MNP x (GS**2) tensor
+                current_grid_frame_data = grid_frame_data[frame_num]  # MNP x MNP x (GS**2) tensor
         
-            # if self.mode != 'naive':
-            #     social_tensor = self.getSocialTensor(current_grid_frame_data, self.hidden_states)  
+            if self.mode != 'naive':
+                social_tensor = self.getSocialTensor(current_grid_frame_data, self.hidden_states)  
 
             for ped in range(args.maxNumPeds):
                 # print "Pedestrian Number", ped
@@ -146,25 +146,25 @@ class SocialModel():
                     self.spatial_input = tf.slice(current_frame_data - prev_frame_data, [ped, 1], [1, 2])  # Tensor of shape (1,2)
                     
                     # Extract the social tensor of the current ped
-                    # if self.mode == 'social':
-                    #     self.tensor_input = tf.slice(social_tensor, [ped, 0], [1, args.grid_size*args.grid_size*args.rnn_size])  
-                    # elif self.mode == 'occupancy':
-                    #     self.tensor_input = tf.expand_dims(social_tensor[ped], 0)
+                    if self.mode == 'social':
+                        self.tensor_input = tf.slice(social_tensor, [ped, 0], [1, args.grid_size*args.grid_size*args.rnn_size])  
+                    elif self.mode == 'occupancy':
+                        self.tensor_input = tf.expand_dims(social_tensor[ped], 0)
 
                 with tf.name_scope("embeddings_operations"):
                     # Embed the spatial input
                     embedded_spatial_input = tf.nn.relu(tf.nn.xw_plus_b(self.spatial_input, self.embedding_w, self.embedding_b))
                     
                     # Embed the tensor input
-                    # if self.mode != 'naive':
-                    #     embedded_tensor_input = tf.nn.relu(tf.nn.xw_plus_b(self.tensor_input, self.embedding_t_w, self.embedding_t_b))
+                    if self.mode != 'naive':
+                        embedded_tensor_input = tf.nn.relu(tf.nn.xw_plus_b(self.tensor_input, self.embedding_t_w, self.embedding_t_b))
 
                 with tf.name_scope("concatenate_embeddings"):
                     complete_input = embedded_spatial_input
 
                     # Concatenate the embeddings
-                    # if self.mode != 'naive':
-                    #     complete_input = tf.concat([embedded_spatial_input, embedded_tensor_input], 1)
+                    if self.mode != 'naive':
+                        complete_input = tf.concat([embedded_spatial_input, embedded_tensor_input], 1)
 
                 # One step of LSTM
                 with tf.variable_scope("LSTM") as scope:
@@ -237,13 +237,13 @@ class SocialModel():
             self.embedding_b = tf.get_variable("embedding_b", [args.embedding_size], initializer=tf.constant_initializer(0.1))
 
         # Define variables for the social tensor embedding layer
-        # size_factor = args.rnn_size
-        # if self.mode == 'occupancy':
-        #     size_factor = 1
+        size_factor = args.rnn_size
+        if self.mode == 'occupancy':
+            size_factor = 1
 
-        # with tf.variable_scope("tensor_embedding"):
-        #     self.embedding_t_w = tf.get_variable("embedding_t_w", [args.grid_size*args.grid_size*size_factor, args.embedding_size], initializer=tf.truncated_normal_initializer(stddev=0.1))
-        #     self.embedding_t_b = tf.get_variable("embedding_t_b", [args.embedding_size], initializer=tf.constant_initializer(0.1))
+        with tf.variable_scope("tensor_embedding"):
+            self.embedding_t_w = tf.get_variable("embedding_t_w", [args.grid_size*args.grid_size*size_factor, args.embedding_size], initializer=tf.truncated_normal_initializer(stddev=0.1))
+            self.embedding_t_b = tf.get_variable("embedding_t_b", [args.embedding_size], initializer=tf.constant_initializer(0.1))
 
         # Define variables for the output linear layer
         with tf.variable_scope("output_layer"):
@@ -263,13 +263,17 @@ class SocialModel():
         '''
         # Create a zero tensor of shape MNP x (GS**2) x RNN_size
         social_tensor = tf.zeros([self.args.maxNumPeds, self.grid_size*self.grid_size, self.rnn_size], name="social_tensor")
+        
         # Create a list of zero tensors each of shape 1 x (GS**2) x RNN_size of length MNP
         social_tensor = tf.split(social_tensor, self.args.maxNumPeds, 0)
+        
         # Concatenate list of hidden states to form a tensor of shape MNP x RNN_size * 2
         hidden_states = tf.concat(hidden_state_list, 0)
+        
         # Split the grid_frame_data into grid_data for each pedestrians
         # Consists of a list of tensors each of shape 1 x MNP x (GS**2) of length MNP
         grid_frame_ped_data = tf.split(grid_frame_data, self.args.maxNumPeds, 0)
+        
         # Squeeze tensors to form MNP x (GS**2) matrices
         grid_frame_ped_data = [tf.squeeze(input_, [0]) for input_ in grid_frame_ped_data]
 
