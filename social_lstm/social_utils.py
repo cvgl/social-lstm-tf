@@ -16,8 +16,8 @@ import random
 # sequence.
 class SocialDataLoader():
 
-    def __init__(self, batch_size=50, seq_length=5, maxNumPeds=60,
-            dataset_path='../data', forcePreProcess=False):
+    def __init__(self, batch_size=10, seq_length=20, maxNumPeds=60,
+            dataset_path=None, data_files=[], forcePreProcess=False):
         '''
         Initialiser function for the SocialDataLoader class
         params:
@@ -32,8 +32,11 @@ class SocialDataLoader():
                           '../data/ucy/univ']
         '''
         self.data_dir = dataset_path
-        self.used_data_dirs = [os.path.join(dataset_path, _file) for _file in
-                os.listdir(self.data_dir)]
+        # self.used_data_dirs = [os.path.join(dataset_path, _file) for _file in
+        #         os.listdir(self.data_dir)]
+        
+        self.used_data_dirs = data_files
+
         # Number of datasets
         self.numDatasets = len(self.used_data_dirs)
 
