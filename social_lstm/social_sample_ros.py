@@ -22,7 +22,7 @@ from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker, MarkerArray
 
 # Social lstm trained on drone dataset with obs 8, no relative position
-# CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/checkpoints/obs-8-2/social/08_28_00_45'
+CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/checkpoints/obs-8-2/social/08_28_00_45'
 
 # Social lstm trained on drone dataset with obs 4, no relative position
 # CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/checkpoints/obs-8-2/social/08_28_00_45'
@@ -31,7 +31,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 # CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/checkpoints/naive-lstm/naive/09_06_19_47'
 
 # Naive lstm trained on simulation + drone data with obs 8
-CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/checkpoints/naive-lstm/naive/09_07_16_18'
+# CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/checkpoints/naive-lstm/naive/09_07_16_18'
 class Social_Lstm_Prediction():
     def __init__(self):
         self.node_name = 'social_lstm'
