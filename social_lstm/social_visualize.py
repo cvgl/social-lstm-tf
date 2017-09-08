@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import pickle
 import os
 
-CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/checkpoints/test/naive/09_06_15_24'
+CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/checkpoints/naive-lstm/naive/09_06_19_47'
 
 
 def plot_trajectories(true_trajs, pred_trajs, obs_length, name):
