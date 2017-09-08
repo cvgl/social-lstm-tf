@@ -124,7 +124,7 @@ class Social_Lstm_Prediction():
 
         self.obs_sequence = np.concatenate((self.obs_sequence, curr_frame), axis=0)
 
-        if len(tracks) == 0 or self.frame_num < self.obs_sequence.shape[0]: # or self.frame_interval_index < self.frame_interval:
+        if len(tracks) == 0 or self.frame_num < self.fps: # or self.frame_interval_index < self.frame_interval:
             self.pedestrian_prediction_pub.publish(people_predictions)
             self.prediction_marker_pub.publish(prediction_markers)
             return
