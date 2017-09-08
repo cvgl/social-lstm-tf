@@ -109,8 +109,11 @@ def main():
     saver.restore(sess, ckpt.model_checkpoint_path)
 
     # Create a SocialDataLoader object with batch_size 1 and seq_length equal to observed_length + pred_length
+    datafiles = [os.path.join(sample_args.test_dataset, _file) 
+        for _file in os.listdir(sample_args.test_dataset) if _file.endswith('csv')]
     data_loader = SocialDataLoader(1, sample_args.pred_length +
-            sample_args.obs_length, saved_args.maxNumPeds, sample_args.test_dataset, True)
+            sample_args.obs_length, saved_args.maxNumPeds, sample_args.test_dataset, datafiles, True)
+    print 'Number of batches: ', data_loader.num_batches
 
     # Reset all pointers of the data_loader
     data_loader.reset_batch_pointer()
