@@ -85,7 +85,7 @@ def main():
                         help='Path training data')
     parser.add_argument('--visible',type=str,
                         required=False, default=None, help='GPU to run on')
-    parser.add_argument('--mode', type=str, default='naive', 
+    parser.add_argument('--mode', type=str, default='occupancy', 
                         help='social, occupancy, naive')
     parser.add_argument('--model_path', type=str)
 
