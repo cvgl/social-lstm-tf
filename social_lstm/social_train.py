@@ -213,7 +213,7 @@ def train(args):
 
             train_data_loader = SocialDataLoader(args.batch_size, args.seq_length,
                 args.maxNumPeds, dataset_path, train_data_files, forcePreProcess=True)
-            test_data_loader = SocialDataLoader(args.batch_size, args.obs_length + args.pred_length, 
+            test_data_loader = SocialDataLoader(1, args.obs_length + args.pred_length, 
                 args.maxNumPeds, dataset_path, test_data_files, forcePreProcess=True)
 
             print 'Training files: ', train_data_files
