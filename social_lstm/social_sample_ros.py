@@ -31,7 +31,10 @@ from visualization_msgs.msg import Marker, MarkerArray
 # CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/checkpoints/naive-lstm/naive/09_06_19_47'
 
 # Naive lstm trained on simulation + drone data with obs 8
-CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/checkpoints/naive-lstm/naive/09_07_16_18'
+# CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/checkpoints/naive-lstm/naive/09_07_16_18'
+
+# Occupancy lstm trained on simulation + drone dataset with obs 8
+CHK_DIR = '/cvgl2/u/junweiy/Jackrabbot/checkpoints/naive-lstm/occupancy/09_10_13_13'
 class Social_Lstm_Prediction():
     def __init__(self):
         self.node_name = 'social_lstm'
@@ -40,7 +43,7 @@ class Social_Lstm_Prediction():
 
         self.obs_length = 8
         self.pred_length = 8
-        self.frame_interval = 6
+        self.frame_interval = 2
         self.max_pedestrians = 60
         self.dimensions = [0, 0]
         self.fps = 15
